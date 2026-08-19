@@ -37,6 +37,7 @@ const S = {
   row: 0,        // riga in lavorazione: il vicino che arriva
   out: 1,        // pennello: l'esito da applicare
   force: 100,    // pennello: quanto spesso
+  both: true,    // una regola vale nei due sensi: niente incontri con due esiti
 };
 
 /* ------------------------------------------------------------ tavolozza */
@@ -345,9 +346,33 @@ function getR(a,d){ return S.R[a*MAXN+d]; }
 function getP(a,d){ return S.P[a*MAXN+d]; }
 function setRule(a,d,out,p){
   if(a >= S.n || d >= S.n || a === d) return;
-  if(out === KEEP || p <= 0){ S.R[a*MAXN+d] = KEEP; S.P[a*MAXN+d] = 0; return; }
+  // esito nullo: "niente", frequenza zero, o un esito uguale a com'e' gia'
+  if(out === KEEP || p <= 0 || out === d){ S.R[a*MAXN+d] = KEEP; S.P[a*MAXN+d] = 0; return; }
   S.R[a*MAXN+d] = out;
   S.P[a*MAXN+d] = p;
+}
+// scrive la regola nei due sensi: l'incontro fra due colori ha un esito solo.
+// sul verso opposto l'esito viene normalizzato da setRule, quindi la predazione
+// (dove l'esito coincide col colore che subisce) resta invariata.
+function setPair(a,d,out,p){
+  setRule(a,d,out,p);
+  setRule(d,a,out,p);
+}
+// allinea le coppie gia' presenti che dicono cose diverse nei due sensi
+function symmetrise(){
+  let fixed = 0;
+  for(let a=0;a<S.n;a++) for(let d=a+1;d<S.n;d++){
+    const r1 = getR(a,d), p1 = getP(a,d);
+    const r2 = getR(d,a), p2 = getP(d,a);
+    const live1 = r1 !== KEEP && p1 > 0, live2 = r2 !== KEEP && p2 > 0;
+    if(!live1 && !live2) continue;
+    if(live1 && live2 && r1 === r2 && p1 === p2) continue;
+    const [r,p] = (!live2 || (live1 && p1 >= p2)) ? [r1,p1] : [r2,p2];
+    setPair(a,d,r,p);
+    // conta solo i cambiamenti veri: sulla predazione la copia si annulla da sola
+    if(getR(a,d) !== r1 || getP(a,d) !== p1 || getR(d,a) !== r2 || getP(d,a) !== p2) fixed++;
+  }
+  return fixed;
 }
 function clearRules(){ S.R.fill(KEEP); S.P.fill(0); }
 
@@ -571,7 +596,7 @@ function refreshVerdict(){
 
 function applyBrush(a, d){
   if(a === d || a >= S.n || d >= S.n) return;
-  setRule(a, d, S.out, S.force);
+  if(S.both) setPair(a, d, S.out, S.force); else setRule(a, d, S.out, S.force);
   lastTouched = [a,d];
   paintMatrix(); paintRow(); refreshVerdict(); save();
 }
@@ -659,7 +684,7 @@ function save(){
     localStorage.setItem(KEY, JSON.stringify({
       n: S.n, colors: S.colors,
       R: Array.from(S.R), P: Array.from(S.P),
-      size: S.size, neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
+      size: S.size, both: S.both, neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
       stopOnStasis: S.stopOnStasis, speed: S.speed
     }));
   }catch(e){}
@@ -670,6 +695,7 @@ function loadCommon(d){
   const fb = defaultPalette(S.n);
   while(S.colors.length < S.n) S.colors.push(fb[S.colors.length]);
   S.size = Math.min(240, Math.max(20, d.size|0 || 80));
+  S.both = d.both !== false;
   S.neigh8 = !!d.neigh8; S.wrap = d.wrap !== false;
   S.fade = d.fade !== false; S.stopOnStasis = d.stopOnStasis !== false;
   S.speed = Math.min(60, Math.max(1, d.speed|0 || 20));
@@ -776,6 +802,12 @@ function wire(){
     applyBrush(S.row, +b.dataset.d);
   });
 
+  $('chkBoth').addEventListener('change', ev => {
+    S.both = ev.target.checked;
+    $('symBtn').disabled = false;
+    toast(S.both ? 'Le regole varranno nei due sensi' : 'I due sensi ora sono indipendenti');
+    save();
+  });
   $('rngForce').addEventListener('input', ev => {
     S.force = +ev.target.value;
     $('outForce').textContent = S.force + '%';
@@ -783,13 +815,14 @@ function wire(){
 
   document.querySelectorAll('.quick button').forEach(b => b.onclick = () => {
     const k = b.dataset.act;
-    if(k === 'mirror'){
-      if(!lastTouched){ toast('Prima tocca una casella'); return; }
-      const [a,d] = lastTouched;
-      setRule(d, a, getR(a,d), getP(a,d));
-      toast('Vale anche al contrario');
+    if(k === 'sym'){
+      const fixed = symmetrise();
+      toast(fixed ? ('Allineate ' + fixed + (fixed === 1 ? ' coppia' : ' coppie')) : 'Erano già tutte coerenti');
     }
-    if(k === 'row'){ for(let d=0; d<S.n; d++) setRule(S.row, d, S.out, S.force); lastTouched = null; toast('Riga riempita'); }
+    if(k === 'row'){
+      for(let d=0; d<S.n; d++){ if(S.both) setPair(S.row, d, S.out, S.force); else setRule(S.row, d, S.out, S.force); }
+      lastTouched = null; toast('Riga riempita');
+    }
     if(k === 'clearrow'){ for(let d=0; d<S.n; d++) setRule(S.row, d, KEEP, 0); lastTouched = null; toast('Riga svuotata'); }
     if(k === 'clearall'){ clearRules(); lastTouched = null; toast('Tutte le reazioni tolte'); }
     paintMatrix(); paintRow(); refreshVerdict(); save();
@@ -877,7 +910,7 @@ function wire(){
     S.n = 8; S.colors = defaultPalette(8);
     PRESETS.wheel();
     S.neigh8 = false; S.wrap = true; S.fade = true; S.stopOnStasis = true; S.speed = 20;
-    S.row = 0; S.out = 1; S.force = 100; S.brush = 0; lastTouched = null;
+    S.row = 0; S.out = 1; S.force = 100; S.both = true; S.brush = 0; lastTouched = null;
     allocWorld(80, false); fitCanvas();
     syncUI(); buildPalette(); buildMatrix(); buildPicks(); buildBrushes(); buildPaletteUI();
     needsDraw = true; toast('Tutto ripristinato');
@@ -901,6 +934,7 @@ function syncUI(){
   $('rngSpeed').value = S.speed;  $('speedVal').textContent = S.speed;
   $('rngBrush').value = S.brushSize; $('brushSizeVal').textContent = S.brushSize;
   $('rngForce').value = S.force;  $('outForce').textContent = S.force + '%';
+  $('chkBoth').checked = S.both;
   $('chkMoore').checked = S.neigh8;
   $('chkWrap').checked = S.wrap;
   $('chkFade').checked = S.fade;

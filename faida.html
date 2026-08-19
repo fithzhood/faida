@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="theme-color" content="#121316">
 <title>Faida</title>
-<link rel="stylesheet" href="faida.css?v=4">
+<link rel="stylesheet" href="faida.css?v=5">
 </head>
 <body>
 
@@ -52,8 +52,9 @@
         <label class="sl force"><span>quanto spesso</span><input type="range" id="rngForce" min="5" max="100" step="5" value="100"><output id="outForce">100%</output></label>
         <div class="pick"><span class="pickLab">chi arriva</span><div class="picks" id="pickA"></div></div>
         <div class="pick"><span class="pickLab" id="rowLab">quando &hellip;</span><div class="rows" id="rowCells"></div></div>
+        <label class="tog"><input type="checkbox" id="chkBoth" checked><span class="box"></span><span>una regola vale nei due sensi</span></label>
         <div class="quick">
-          <button data-act="mirror">anche al contrario</button>
+          <button data-act="sym" id="symBtn">rendi coerenti</button>
           <button data-act="row">tutta la riga</button>
           <button data-act="clearrow">svuota riga</button>
           <button data-act="clearall">svuota tutto</button>
@@ -113,6 +114,6 @@
   </div>
 </section>
 
-<script src="faida.js?v=4"></script>
+<script src="faida.js?v=5"></script>
 </body>
 </html>

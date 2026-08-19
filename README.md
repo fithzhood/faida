@@ -33,9 +33,32 @@ Quindi *verde + rosso → viola* è una regola esprimibile, e con un tocco su
 originale è il caso particolare in cui `R[a][d] = a`.
 
 Nota sull'orientamento della matrice: **la riga è il vicino che arriva, la
-colonna è la casella che subisce**. Le due caselle simmetriche sono indipendenti:
-`R[verde][rosso]` dice cosa diventa il rosso, `R[rosso][verde]` cosa diventa il
-verde. Si possono impostare diverse — uno dei due muta e l'altro no.
+colonna è la casella che subisce**. Le due caselle simmetriche descrivono due
+eventi diversi: `R[verde][rosso]` dice cosa diventa il rosso, `R[rosso][verde]`
+cosa diventa il verde.
+
+## La matrice non è simmetrica (e non può esserlo)
+
+La ruota ciclica vive di asimmetria: il rosso mangia l'arancio, ma l'arancio non
+fa niente al rosso. Imporre `R[a][d] = R[d][a]` cancellerebbe il modello di
+partenza.
+
+Però un incontro non deve avere due esiti diversi, e per questo c'è
+l'interruttore **una regola vale nei due sensi** (acceso di default): ogni regola
+che scrivi viene applicata a entrambe le caselle della coppia, quindi è
+impossibile stabilire che *verde+rosso* dia viola da una parte e giallo
+dall'altra — l'ultima parola allinea tutte e due.
+
+Il trucco che lo rende innocuo per la predazione: **una regola il cui esito è già
+il colore della casella non è una regola**, e viene scartata. Scrivere
+"l'arancio toccato dal rosso diventa rosso" nei due sensi produce, sul verso
+opposto, "il rosso toccato dall'arancio diventa rosso" — cioè niente. Per questo
+la ruota ciclica sopravvive intatta anche con l'interruttore acceso.
+
+Spegnendolo, i due sensi tornano indipendenti: servono per la predazione
+asimmetrica e per la distruzione reciproca (dove ognuno converte l'altro a sé).
+Il pulsante **rendi coerenti** allinea in un colpo le coppie discordi già
+presenti — utile dopo *Alchimia*, che ne genera qualcuna.
 
 ## Come si compone una regola
 
