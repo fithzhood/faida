@@ -129,8 +129,11 @@ passo. Racconta il regime in cui si trova il mondo meglio di qualsiasi immagine.
 - Partendo da poche macchie nel vuoto resta alto finché c'è vuoto da occupare,
   poi crolla: se i colori seminati non hanno regole fra loro, il mondo si divide
   in regioni e si ferma — viene fuori un diagramma di Voronoi.
-- Quando arriva a 0 l'app si ferma da sola e lo dice: qualcuno ha vinto, oppure
-  i sopravvissuti non si fanno più niente.
+- Quando arriva a 0 l'app si ferma da sola e **dice perché**: chi ha vinto, o
+  quali coppie di colori si stanno toccando senza avere una regola. Quasi sempre
+  la risposta a "perché non succede niente?" è quella — la ruota ciclica riempie
+  8 coppie su 28, il resto della matrice è vuoto finché non lo riempi tu.
+  *Mescolanza* e *Alchimia* invece le coprono tutte.
 
 ## Note tecniche
 

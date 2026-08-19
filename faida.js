@@ -346,7 +346,7 @@ function frame(now){
       stepped = true;
       guard++;
       if(S.stopOnStasis){
-        if(ch === 0){ if(++stasisRun >= 2){ setRunning(false); stoppedByStasis = true; toast('Quiete: nessuno si muove più'); break; } }
+        if(ch === 0){ if(++stasisRun >= 2){ setRunning(false); stoppedByStasis = true; toast(stasisReason(), true); break; } }
         else stasisRun = 0;
       }
     }
@@ -363,7 +363,7 @@ function frame(now){
 
 function setRunning(v){
   S.running = v;
-  if(v) stoppedByStasis = false;
+  if(v){ stoppedByStasis = false; hideToast(); }
   acc = 0;
   const b = $('btnPlay');
   b.querySelector('i').innerHTML = v ? '&#10074;&#10074;' : '&#9654;';
@@ -375,12 +375,49 @@ function setRunning(v){
 function wakeIfStalled(){ if(stoppedByStasis && !S.running) setRunning(true); }
 
 let toastTimer = 0;
-function toast(msg){
+function toast(msg, sticky){
   const el = $('toast');
-  el.textContent = msg;
+  el.innerHTML = msg;
   el.hidden = false;
+  el.classList.toggle('big', !!sticky);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 1900);
+  if(!sticky) toastTimer = setTimeout(() => { el.hidden = true; }, 1900);
+}
+function hideToast(){ clearTimeout(toastTimer); $('toast').hidden = true; }
+
+// quando tutto si ferma, dire PERCHE': quasi sempre e' una regola che manca
+function stasisReason(){
+  const { w, h, grid } = S;
+  const vivi = new Set();
+  const coppie = new Set();
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const a = grid[y*w+x];
+      if(a >= WALL) continue;
+      vivi.add(a);
+      const rt = x < w-1 ? grid[y*w+x+1] : -1;
+      const dn = y < h-1 ? grid[(y+1)*w+x] : -1;
+      for(const b of [rt, dn]){
+        if(b < 0 || b >= WALL || b === a) continue;
+        coppie.add(Math.min(a,b) * MAXN + Math.max(a,b));
+      }
+    }
+  }
+  if(vivi.size === 0) return 'Non &egrave; rimasto nessun colore.';
+  if(vivi.size === 1) return 'Ha vinto <b>' + colName([...vivi][0]) + '</b>: &egrave; rimasto solo lui.';
+  if(coppie.size === 0) return 'Quiete: i colori rimasti non si toccano da nessuna parte.';
+
+  const mute = [];
+  for(const k of coppie){
+    const a = (k / MAXN) | 0, b = k % MAXN;
+    if(getR(a,b) === KEEP || getP(a,b) === 0) mute.push([a,b]);
+  }
+  if(mute.length === coppie.size){
+    const primi = mute.slice(0,2).map(([a,b]) => colName(a) + ' + ' + colName(b)).join(', ');
+    const altre = mute.length > 2 ? ' e altre ' + (mute.length - 2) : '';
+    return 'Quiete: <b>' + primi + '</b>' + altre + ' si toccano, ma per quelle coppie non hai messo nessuna regola.';
+  }
+  return 'Quiete: con queste regole nessun incontro cambia pi&ugrave; niente.';
 }
 
 /* ----------------------------------------------------------- le regole */
