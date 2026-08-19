@@ -11,8 +11,9 @@
 'use strict';
 
 const MAXN = 12;
-const WALL = 12;          // stato speciale: non reagisce e non fa reagire
-const NSTATE = MAXN + 1;  // 0..11 colori + muro
+const WALL = 12;          // barriera: non reagisce e non fa reagire
+const VOID = 13;          // vuoto: qualunque colore lo occupa, senza bisogno di regole
+const NSTATE = MAXN + 2;  // 0..11 colori + muro + vuoto
 const KEEP = 255;         // esito "resta com'e'"
 const LEVELS = 6;         // livelli di dissolvenza precalcolati
 
@@ -69,8 +70,9 @@ function defaultPalette(n){
   return out;
 }
 const WALL_HEX = '#6b7280';
-const colName = (i) => i === WALL ? 'Muro' : (i === KEEP ? 'niente' : (S.colors[i] ? S.colors[i].name : '?'));
-const colHex  = (i) => i === WALL ? WALL_HEX : (S.colors[i] ? S.colors[i].hex : '#2a2d34');
+const VOID_HEX = '#0e1013';
+const colName = (i) => i === WALL ? 'Muro' : (i === VOID ? 'Vuoto' : (i === KEEP ? 'niente' : (S.colors[i] ? S.colors[i].name : '?')));
+const colHex  = (i) => i === WALL ? WALL_HEX : (i === VOID ? VOID_HEX : (S.colors[i] ? S.colors[i].hex : '#2a2d34'));
 
 /* --------------------------------------------------------- colori a 32b */
 let pal32 = new Uint32Array(NSTATE);
@@ -86,6 +88,7 @@ function buildPalette(){
     rgb.push(c ? hexRGB(c.hex) : [24,26,30]);
   }
   rgb.push(hexRGB(WALL_HEX));
+  rgb.push(hexRGB(VOID_HEX));
   for(let i=0;i<NSTATE;i++){
     const [r,g,b] = rgb[i];
     pal32[i] = (255<<24) | (b<<16) | (g<<8) | r;   // little endian ABGR
@@ -177,10 +180,45 @@ function doStep(){
       const xLf = x>0 ? x-1 : (wrap ? w-1 : -1);
       const xRt = x<w-1 ? x+1 : (wrap ? 0 : -1);
 
+      // --- il vuoto: chi arriva lo occupa, senza bisogno di regole.
+      // se ci arrivano due colori diversi nello stesso passo, e' un incontro.
+      if(d === VOID){
+        let c1 = -1, c2 = -1, n1 = 0, n2 = 0;
+        const arriva = (s) => {
+          if(s === WALL || s === VOID) return;
+          if(s === c1){ n1++; return; }
+          if(s === c2){ n2++; return; }
+          if(c1 < 0){ c1 = s; n1 = 1; return; }
+          if(c2 < 0){ c2 = s; n2 = 1; return; }
+          // un terzo pretendente entra a sorte al posto del meno numeroso
+          if(Math.random() < 0.34){ if(n1 <= n2){ c1 = s; n1 = 1; } else { c2 = s; n2 = 1; } }
+        };
+        if(xLf >= 0) arriva(grid[y*w+xLf]);
+        if(xRt >= 0) arriva(grid[y*w+xRt]);
+        if(yUp >= 0) arriva(grid[yUp*w+x]);
+        if(yDn >= 0) arriva(grid[yDn*w+x]);
+        if(d8){
+          if(xLf>=0 && yUp>=0) arriva(grid[yUp*w+xLf]);
+          if(xRt>=0 && yUp>=0) arriva(grid[yUp*w+xRt]);
+          if(xLf>=0 && yDn>=0) arriva(grid[yDn*w+xLf]);
+          if(xRt>=0 && yDn>=0) arriva(grid[yDn*w+xRt]);
+        }
+        if(c1 < 0) continue;                       // niente intorno: resta vuoto
+        let win;
+        if(c2 < 0) win = c1;                       // un colore solo: si espande
+        else {
+          const r = R[c1*MAXN+c2], p = P[c1*MAXN+c2];
+          if(r !== KEEP && p > 0 && Math.random()*100 < p) win = r;
+          else win = (Math.random()*(n1+n2) < n1) ? c1 : c2;
+        }
+        if(win !== d){ next[i] = win; changed++; }
+        continue;
+      }
+
       let cnt = 0, survive = 1;
       // il vicino `s` si espande fin qui: dall'incontro con `d` nasce R[s][d]
       const meet = (s) => {
-        if(s === WALL) return;
+        if(s === WALL || s === VOID) return;
         const k = s*MAXN + d;
         const p = P[k];
         if(!p) return;
@@ -271,7 +309,7 @@ function updateStats(now){
   counts.fill(0);
   const g = S.grid;
   for(let i=0;i<g.length;i++) counts[g[i]]++;
-  const total = g.length - counts[WALL];
+  const total = g.length - counts[WALL] - counts[VOID];
   let alive = 0;
   for(let i=0;i<S.n;i++) if(counts[i] > 0) alive++;
 
@@ -513,9 +551,10 @@ function swatch(i, cls){
 function buildPicks(){
   // il pennello: ogni colore, il muro, oppure "niente"
   const boxO = $('pickOut');
-  boxO.style.gridTemplateColumns = `repeat(${pickCols(S.n + 2)}, 1fr)`;
+  boxO.style.gridTemplateColumns = `repeat(${pickCols(S.n + 3)}, 1fr)`;
   boxO.innerHTML = '';
   for(let i=0;i<S.n;i++) boxO.appendChild(swatch(i, 'pk'));
+  boxO.appendChild(swatch(VOID, 'pk void'));
   boxO.appendChild(swatch(WALL, 'pk'));
   const none = swatch(KEEP, 'pk none');
   none.innerHTML = '<span class="sw nil">&#8709;</span>';
@@ -586,6 +625,7 @@ function refreshVerdict(){
   const testa = `<b>${na}</b> + <b>${nd}</b>`;
   let corpo;
   if(r === WALL)      corpo = `restano <b>macerie</b>`;
+  else if(r === VOID) corpo = `si annullano e lasciano il <b>vuoto</b>`;
   else if(r === a)    corpo = `vince <b>${na}</b>: il ${nd.toLowerCase()} diventa ${na.toLowerCase()}`;
   else if(r === d)    corpo = `vince <b>${nd}</b>: il ${na.toLowerCase()} diventa ${nd.toLowerCase()}`;
   else                corpo = `diventano <b>${colName(r)}</b> tutti e due`;
@@ -611,6 +651,7 @@ function buildBrushes(){
     box.appendChild(b);
   };
   for(let i=0;i<S.n;i++) mk(i, S.colors[i].name, S.colors[i].hex);
+  mk(VOID, 'Vuoto', VOID_HEX);
   mk(WALL, 'Muro', WALL_HEX);
 }
 function buildPaletteUI(){
@@ -752,13 +793,13 @@ function setN(n){
   for(let a=0;a<MAXN;a++) for(let d=0;d<MAXN;d++){
     const k = a*MAXN+d;
     if(a>=n || d>=n){ S.R[k] = KEEP; S.P[k] = 0; }
-    else if(S.R[k] !== KEEP && S.R[k] !== WALL && S.R[k] >= n){
+    else if(S.R[k] !== KEEP && S.R[k] !== WALL && S.R[k] !== VOID && S.R[k] >= n){
       S.R[k] = KEEP; S.P[k] = 0;   // l'esito puntava a un colore sparito
     }
   }
   if(S.row >= n) S.row = 0;
-  if(S.out !== KEEP && S.out !== WALL && S.out >= n) S.out = 0;
-  if(S.brush !== WALL && S.brush >= n) S.brush = 0;
+  if(S.out !== KEEP && S.out !== WALL && S.out !== VOID && S.out >= n) S.out = 0;
+  if(S.brush !== WALL && S.brush !== VOID && S.brush >= n) S.brush = 0;
   lastTouched = null;
   const g = S.grid;
   if(g) for(let i=0;i<g.length;i++) if(g[i] !== WALL && g[i] >= n) g[i] = (Math.random()*n)|0;
@@ -852,11 +893,11 @@ function wire(){
   });
   // tela pulita: tutto muro, e ferma, cosi' si disegna con calma
   $('btnClear').onclick = () => {
-    S.grid.fill(WALL); S.prev.set(S.grid);
+    S.grid.fill(VOID); S.prev.set(S.grid);
     S.step = 0; S.churn = 0; stasisRun = 0; stoppedByStasis = false;
     setRunning(false);
     needsDraw = true; updateStats(performance.now());
-    toast('Tela vuota — disegna, poi premi avvia');
+    toast('Tela vuota — disegna, poi premi avvia: i colori si espanderanno');
   };
   $('btnFill').onclick = () => {
     S.grid.fill(S.brush); S.prev.set(S.grid);

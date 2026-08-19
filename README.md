@@ -17,6 +17,21 @@ dei modelli si chiama *automa cellulare ciclico*.
 
 Riscritto in HTML/CSS/JS, con una differenza che cambia il modello.
 
+## I tre stati di una casella
+
+- **un colore** — si espande, e incontra
+- **vuoto** — non fa niente e non oppone niente: qualunque colore lo occupa al
+  passo dopo, senza bisogno di regole. È il terreno su cui il mondo cresce.
+- **muro** — barriera inerte: non si espande, non viene occupato, non fa reagire
+  nessuno. Serve a incanalare i fronti.
+
+Vuoto e muro si somigliano solo a guardarli. Se semini tre macchie in una tela di
+**muri** non succede niente — non c'è dove espandersi. In una tela di **vuoto**
+le macchie crescono fino a toccarsi, e dove si toccano avviene l'incontro.
+
+Se due colori diversi raggiungono la stessa casella vuota nello stesso passo,
+l'incontro avviene lì: dalla casella nasce direttamente l'esito previsto.
+
 ## La differenza: cosa esce dall'incontro
 
 Nell'originale un colore poteva solo **diventare il suo predatore**: l'esito di
@@ -89,11 +104,11 @@ Le scorciatoie: **tutta la riga**, **svuota riga**, **svuota tutto**.
 
 ## Le altre due stanze
 
-- **Disegna** — scegli un colore (o il **muro**, che non reagisce e non fa
-  reagire) e trascina il dito sul mondo. **Svuota** ferma la simulazione e
-  lascia una tela di soli muri: ci si disegna con calma la configurazione
-  voluta e poi si preme avvia. **Riempi col pennello** fa lo stesso ma con il
-  colore scelto, se serve un fondo che partecipa invece di uno inerte.
+- **Disegna** — scegli un colore, il **vuoto** o il **muro**, e trascina il dito
+  sul mondo. **Svuota** ferma la simulazione e lascia una tela di vuoto: ci si
+  disegna con calma la configurazione voluta e poi si preme avvia, e i colori si
+  espandono. **Riempi col pennello** fa lo stesso con il colore scelto, se serve
+  un fondo che partecipa invece che uno neutro.
 - **Mondo** — quanti colori (2-12), quanto è fitta la griglia, la velocità, il
   vicinato a 4 o a 8, i bordi che si richiudono, e la tavolozza.
 
@@ -111,6 +126,9 @@ passo. Racconta il regime in cui si trova il mondo meglio di qualsiasi immagine.
   resta al suo posto.
 - Con la **mescolanza** si assesta intorno al 38%: i continenti si muovono solo
   ai bordi.
+- Partendo da poche macchie nel vuoto resta alto finché c'è vuoto da occupare,
+  poi crolla: se i colori seminati non hanno regole fra loro, il mondo si divide
+  in regioni e si ferma — viene fuori un diagramma di Voronoi.
 - Quando arriva a 0 l'app si ferma da sola e lo dice: qualcuno ha vinto, oppure
   i sopravvissuti non si fanno più niente.
 
