@@ -1,9 +1,12 @@
-/* Faida - automa cellulare a reazioni arbitrarie
-   Ogni casella della matrice dice COSA ESCE quando un vicino di colore `a`
-   tocca una casella di colore `d`:
-     R[a][d] = colore che ne esce (un colore qualsiasi, il muro, o KEEP = invariato)
-     P[a][d] = quanto spesso, 0-100
-   La predazione (R = a) e la ruota ciclica sono solo casi particolari. */
+/* Faida - automa cellulare a incontri
+   Ogni pixel si espande a ogni passo nelle 4 direzioni ortogonali (8 se si vuole).
+   Dove l'espansione raggiunge un colore diverso avviene un INCONTRO, e la matrice
+   dice cosa ne nasce:
+     R[a][b] = colore che esce dall'incontro fra a e b (un colore qualsiasi, un muro)
+     P[a][b] = quanto spesso l'incontro riesce, 0-100
+   L'incontro e' commutativo, quindi la matrice e' SIMMETRICA per costruzione:
+   R[a][b] === R[b][a] sempre. La predazione e' il caso in cui l'esito coincide con
+   uno dei due colori: l'altro si converte, quello resta com'e'. */
 (() => {
 'use strict';
 
@@ -37,7 +40,6 @@ const S = {
   row: 0,        // riga in lavorazione: il vicino che arriva
   out: 1,        // pennello: l'esito da applicare
   force: 100,    // pennello: quanto spesso
-  both: true,    // una regola vale nei due sensi: niente incontri con due esiti
 };
 
 /* ------------------------------------------------------------ tavolozza */
@@ -176,14 +178,16 @@ function doStep(){
       const xRt = x<w-1 ? x+1 : (wrap ? 0 : -1);
 
       let cnt = 0, survive = 1;
-      // un vicino `s` propone di trasformare questa casella in R[s][d]
+      // il vicino `s` si espande fin qui: dall'incontro con `d` nasce R[s][d]
       const meet = (s) => {
         if(s === WALL) return;
         const k = s*MAXN + d;
         const p = P[k];
         if(!p) return;
         const r = R[k];
-        if(r === KEEP || r === d) return;   // esito nullo: non conta come reazione
+        // se dall'incontro esce il colore che c'e' gia', questa casella non cambia:
+        // e' la predazione vista dal lato del predatore
+        if(r === KEEP || r === d) return;
         outS[cnt] = r; outP[cnt++] = p;
         survive *= 1 - p/100;
       };
@@ -344,91 +348,84 @@ function toast(msg){
 /* ----------------------------------------------------------- le regole */
 function getR(a,d){ return S.R[a*MAXN+d]; }
 function getP(a,d){ return S.P[a*MAXN+d]; }
-function setRule(a,d,out,p){
+// l'incontro fra due colori e' uno solo: si scrive nelle due caselle speculari,
+// cosi' la matrice resta simmetrica e non puo' esistere un incontro a due esiti
+function setMeet(a,d,out,p){
   if(a >= S.n || d >= S.n || a === d) return;
-  // esito nullo: "niente", frequenza zero, o un esito uguale a com'e' gia'
-  if(out === KEEP || p <= 0 || out === d){ S.R[a*MAXN+d] = KEEP; S.P[a*MAXN+d] = 0; return; }
-  S.R[a*MAXN+d] = out;
-  S.P[a*MAXN+d] = p;
+  const nullo = (out === KEEP || p <= 0);
+  const k1 = a*MAXN + d, k2 = d*MAXN + a;
+  S.R[k1] = S.R[k2] = nullo ? KEEP : out;
+  S.P[k1] = S.P[k2] = nullo ? 0    : p;
 }
-// scrive la regola nei due sensi: l'incontro fra due colori ha un esito solo.
-// sul verso opposto l'esito viene normalizzato da setRule, quindi la predazione
-// (dove l'esito coincide col colore che subisce) resta invariata.
-function setPair(a,d,out,p){
-  setRule(a,d,out,p);
-  setRule(d,a,out,p);
-}
-// allinea le coppie gia' presenti che dicono cose diverse nei due sensi
-function symmetrise(){
-  let fixed = 0;
-  for(let a=0;a<S.n;a++) for(let d=a+1;d<S.n;d++){
-    const r1 = getR(a,d), p1 = getP(a,d);
-    const r2 = getR(d,a), p2 = getP(d,a);
+// riporta a simmetria una matrice arrivata da fuori (regole salvate da versioni vecchie)
+function forceSymmetry(){
+  for(let a=0;a<MAXN;a++) for(let d=a+1;d<MAXN;d++){
+    const r1 = S.R[a*MAXN+d], p1 = S.P[a*MAXN+d];
+    const r2 = S.R[d*MAXN+a], p2 = S.P[d*MAXN+a];
     const live1 = r1 !== KEEP && p1 > 0, live2 = r2 !== KEEP && p2 > 0;
-    if(!live1 && !live2) continue;
-    if(live1 && live2 && r1 === r2 && p1 === p2) continue;
-    const [r,p] = (!live2 || (live1 && p1 >= p2)) ? [r1,p1] : [r2,p2];
-    setPair(a,d,r,p);
-    // conta solo i cambiamenti veri: sulla predazione la copia si annulla da sola
-    if(getR(a,d) !== r1 || getP(a,d) !== p1 || getR(d,a) !== r2 || getP(d,a) !== p2) fixed++;
+    let r = KEEP, p = 0;
+    if(live1 && (!live2 || p1 >= p2)) { r = r1; p = p1; }
+    else if(live2) { r = r2; p = p2; }
+    S.R[a*MAXN+d] = S.R[d*MAXN+a] = r;
+    S.P[a*MAXN+d] = S.P[d*MAXN+a] = p;
   }
-  return fixed;
 }
 function clearRules(){ S.R.fill(KEEP); S.P.fill(0); }
 
 // il colore a meta' strada fra due, sull'arco piu' corto della ruota
 function midHue(a, d, n){
   let diff = ((d - a) % n + n) % n;
+  if(diff * 2 === n){
+    // colori opposti: i punti di mezzo sono due, se ne prende sempre lo stesso
+    // o la matrice non sarebbe simmetrica
+    const m1 = (a + diff/2) % n, m2 = ((a - diff/2) % n + n) % n;
+    return Math.min(m1, m2);
+  }
   if(diff > n/2) diff -= n;
   return (((a + Math.round(diff/2)) % n) + n) % n;
 }
 
 const PRESETS = {
-  wheel(){ clearRules(); for(let i=0;i<S.n;i++) setRule(i,(i+1)%S.n,i,100); },
-  double(){ clearRules(); for(let i=0;i<S.n;i++){ setRule(i,(i+1)%S.n,i,100); setRule(i,(i+2)%S.n,i,100); } },
-  rps(){ setN(3); clearRules(); for(let i=0;i<3;i++) setRule(i,(i+1)%3,i,100); },
-  rpsls(){ setN(5); clearRules(); for(let i=0;i<5;i++){ setRule(i,(i+1)%5,i,100); setRule(i,(i+2)%5,i,100); } },
-  hierarchy(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++) setRule(i,j,i,100); },
+  wheel(){ clearRules(); for(let i=0;i<S.n;i++) setMeet(i,(i+1)%S.n,i,100); },
+  double(){ clearRules(); for(let i=0;i<S.n;i++){ setMeet(i,(i+1)%S.n,i,100); setMeet(i,(i+2)%S.n,i,100); } },
+  rps(){ setN(3); clearRules(); for(let i=0;i<3;i++) setMeet(i,(i+1)%3,i,100); },
+  rpsls(){ setN(5); clearRules(); for(let i=0;i<5;i++){ setMeet(i,(i+1)%5,i,100); setMeet(i,(i+2)%5,i,100); } },
+  hierarchy(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++) setMeet(i,j,i,100); },
+  // due blocchi che non si conquistano: dove si toccano restano macerie
   factions(){
     clearRules();
     const half = Math.ceil(S.n/2);
-    for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++){
-      if((i<half) !== (j<half)) setRule(i,j,i,70);
+    for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++){
+      if((i<half) !== (j<half)) setMeet(i,j,WALL,70);
     }
   },
-  mutual(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++) if(i!==j) setRule(i,j,i,45); },
+  // ogni incontro fra colori diversi lascia cenere: il mondo si cristallizza
+  ash(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++) setMeet(i,j,WALL,45); },
   // dall'incontro esce la tinta che sta in mezzo: nessuno vince, si mescolano
   mix(){
     clearRules();
-    for(let a=0;a<S.n;a++) for(let d=0;d<S.n;d++){
-      if(a === d) continue;
-      const m = midHue(a, d, S.n);
-      if(m !== d) setRule(a, d, m, 55);
+    for(let a=0;a<S.n;a++) for(let d=a+1;d<S.n;d++){
+      setMeet(a, d, midHue(a, d, S.n), 55);
     }
   },
-  // reazioni sorteggiate: l'esito puo' essere un terzo colore, o cenere
+  // incontri sorteggiati: l'esito puo' essere un terzo colore, o cenere
   alchemy(){
     clearRules();
-    for(let a=0;a<S.n;a++) for(let d=0;d<S.n;d++){
-      if(a === d || Math.random() < 0.45) continue;
+    for(let a=0;a<S.n;a++) for(let d=a+1;d<S.n;d++){
+      if(Math.random() < 0.4) continue;
       let out;
       const r = Math.random();
-      if(r < 0.45) out = (Math.random()*S.n)|0;      // un colore qualsiasi
-      else if(r < 0.85) out = a;                      // predazione
-      else out = WALL;                                // cenere
-      if(out === d) continue;
-      setRule(a, d, out, 25 + ((Math.random()*4)|0)*25);
+      if(r < 0.45) out = (Math.random()*S.n)|0;                 // un colore qualsiasi
+      else if(r < 0.85) out = (Math.random() < 0.5) ? a : d;    // vince uno dei due
+      else out = WALL;                                          // cenere
+      setMeet(a, d, out, 25 + ((Math.random()*4)|0)*25);
     }
   },
   random(){
     clearRules();
     for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++){
-      const r = Math.random();
-      const p = 25 + ((Math.random()*4)|0)*25;
-      if(r < 0.34) continue;
-      else if(r < 0.62) setRule(i,j,i,p);
-      else if(r < 0.90) setRule(j,i,j,p);
-      else { setRule(i,j,i,p); setRule(j,i,j,25 + ((Math.random()*3)|0)*25); }
+      if(Math.random() < 0.34) continue;
+      setMeet(i, j, Math.random() < 0.5 ? i : j, 25 + ((Math.random()*4)|0)*25);
     }
   },
   empty(){ clearRules(); }
@@ -444,8 +441,8 @@ function buildMatrix(){
 
   const corner = document.createElement('div');
   corner.className = 'mc hd corner';
-  corner.innerHTML = '&#8600;';
-  corner.title = 'riga: il vicino che arriva. colonna: la casella che subisce';
+  corner.innerHTML = '+';
+  corner.title = 'cosa nasce dall\'incontro fra il colore della riga e quello della colonna';
   frag.appendChild(corner);
 
   for(let d=0; d<n; d++) frag.appendChild(headCell(d));
@@ -551,7 +548,7 @@ function buildRow(){
 }
 function paintRow(){
   const a = S.row;
-  $('rowLab').innerHTML = `quando <b>${colName(a)}</b> tocca &hellip;`;
+  $('rowLab').innerHTML = `gli incontri di <b>${colName(a)}</b> &mdash; tocca per applicare`;
   for(const b of $('rowCells').children){
     const d = +b.dataset.d;
     const r = getR(a,d), p = getP(a,d);
@@ -561,7 +558,7 @@ function paintRow(){
     const so = b.querySelector('.so');
     so.style.background = live ? colHex(r) : 'transparent';
     so.classList.toggle('empty', !live);
-    b.querySelector('.pc').textContent = (a === d) ? 'sé' : (live ? (p < 100 ? p + '%' : '') : 'niente');
+    b.querySelector('.pc').textContent = (a === d) ? 'stesso' : (live ? (p < 100 ? p + '%' : '') : 'niente');
   }
 }
 function paintPicks(){
@@ -582,21 +579,22 @@ function refreshVerdict(){
   const r = getR(a,d), p = getP(a,d);
   const na = colName(a), nd = colName(d);
   if(r === KEEP || p === 0){
-    el.innerHTML = `<span>Un vicino <b>${na}</b> non fa niente a <b>${nd}</b>.</span>`;
+    el.innerHTML = `<span>Fra <b>${na}</b> e <b>${nd}</b> non succede niente: si sfiorano e restano com'erano.</span>`;
     return;
   }
-  const quando = p === 100 ? 'sempre' : `nel ${p}% dei contatti`;
-  const back = getR(d,a), backP = getP(d,a);
-  if(back === r && backP === p){
-    el.innerHTML = `<span><b>${na}</b> e <b>${nd}</b> si toccano e diventano <b>${colName(r)}</b> tutti e due, ${quando}.</span>`;
-  } else {
-    el.innerHTML = `<span><b>${nd}</b> toccato da <b>${na}</b> diventa <b>${colName(r)}</b>, ${quando}.</span>`;
-  }
+  const quando = p === 100 ? 'sempre' : `nel ${p}% degli incontri`;
+  const testa = `<b>${na}</b> + <b>${nd}</b>`;
+  let corpo;
+  if(r === WALL)      corpo = `restano <b>macerie</b>`;
+  else if(r === a)    corpo = `vince <b>${na}</b>: il ${nd.toLowerCase()} diventa ${na.toLowerCase()}`;
+  else if(r === d)    corpo = `vince <b>${nd}</b>: il ${na.toLowerCase()} diventa ${nd.toLowerCase()}`;
+  else                corpo = `diventano <b>${colName(r)}</b> tutti e due`;
+  el.innerHTML = `<span>${testa} &rarr; ${corpo}, ${quando}.</span>`;
 }
 
 function applyBrush(a, d){
   if(a === d || a >= S.n || d >= S.n) return;
-  if(S.both) setPair(a, d, S.out, S.force); else setRule(a, d, S.out, S.force);
+  setMeet(a, d, S.out, S.force);
   lastTouched = [a,d];
   paintMatrix(); paintRow(); refreshVerdict(); save();
 }
@@ -678,13 +676,13 @@ cv.addEventListener('pointerup', endPaint);
 cv.addEventListener('pointercancel', endPaint);
 
 /* ------------------------------------------------------------ persistenza */
-const KEY = 'faida.v2', OLDKEY = 'faida.v1';
+const KEY = 'faida.v3', OLD2 = 'faida.v2', OLD1 = 'faida.v1';
 function save(){
   try{
     localStorage.setItem(KEY, JSON.stringify({
       n: S.n, colors: S.colors,
       R: Array.from(S.R), P: Array.from(S.P),
-      size: S.size, both: S.both, neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
+      size: S.size, neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
       stopOnStasis: S.stopOnStasis, speed: S.speed
     }));
   }catch(e){}
@@ -695,7 +693,6 @@ function loadCommon(d){
   const fb = defaultPalette(S.n);
   while(S.colors.length < S.n) S.colors.push(fb[S.colors.length]);
   S.size = Math.min(240, Math.max(20, d.size|0 || 80));
-  S.both = d.both !== false;
   S.neigh8 = !!d.neigh8; S.wrap = d.wrap !== false;
   S.fade = d.fade !== false; S.stopOnStasis = d.stopOnStasis !== false;
   S.speed = Math.min(60, Math.max(1, d.speed|0 || 20));
@@ -709,22 +706,38 @@ function load(){
       loadCommon(d);
       S.R.set(d.R.slice(0, MAXN*MAXN));
       S.P.set(d.P.slice(0, MAXN*MAXN));
+      forceSymmetry();
       return true;
     }
-    // le regole vecchie erano solo di predazione: l'esito era il vicino stesso
-    const old = localStorage.getItem(OLDKEY);
-    if(old){
-      const d = JSON.parse(old);
-      if(!d || !Array.isArray(d.M)) return false;
-      loadCommon(d);
-      clearRules();
-      for(let a=0;a<S.n;a++) for(let dd=0;dd<S.n;dd++){
-        const p = d.M[a*MAXN+dd] | 0;
-        if(p > 0) setRule(a, dd, a, p);
+    // v2: stessa forma, ma i due sensi potevano dire cose diverse
+    const two = localStorage.getItem(OLD2);
+    if(two){
+      const d = JSON.parse(two);
+      if(d && Array.isArray(d.R) && Array.isArray(d.P)){
+        loadCommon(d);
+        S.R.set(d.R.slice(0, MAXN*MAXN));
+        S.P.set(d.P.slice(0, MAXN*MAXN));
+        forceSymmetry();
+        localStorage.removeItem(OLD2);
+        save();
+        return true;
       }
-      localStorage.removeItem(OLDKEY);
-      save();
-      return true;
+    }
+    // v1: solo predazione, l'esito era il vicino stesso
+    const one = localStorage.getItem(OLD1);
+    if(one){
+      const d = JSON.parse(one);
+      if(d && Array.isArray(d.M)){
+        loadCommon(d);
+        clearRules();
+        for(let a=0;a<S.n;a++) for(let dd=0;dd<S.n;dd++){
+          const p = d.M[a*MAXN+dd] | 0;
+          if(p > 0) setMeet(a, dd, a, p);
+        }
+        localStorage.removeItem(OLD1);
+        save();
+        return true;
+      }
     }
     return false;
   }catch(e){ return false; }
@@ -802,12 +815,6 @@ function wire(){
     applyBrush(S.row, +b.dataset.d);
   });
 
-  $('chkBoth').addEventListener('change', ev => {
-    S.both = ev.target.checked;
-    $('symBtn').disabled = false;
-    toast(S.both ? 'Le regole varranno nei due sensi' : 'I due sensi ora sono indipendenti');
-    save();
-  });
   $('rngForce').addEventListener('input', ev => {
     S.force = +ev.target.value;
     $('outForce').textContent = S.force + '%';
@@ -815,15 +822,11 @@ function wire(){
 
   document.querySelectorAll('.quick button').forEach(b => b.onclick = () => {
     const k = b.dataset.act;
-    if(k === 'sym'){
-      const fixed = symmetrise();
-      toast(fixed ? ('Allineate ' + fixed + (fixed === 1 ? ' coppia' : ' coppie')) : 'Erano già tutte coerenti');
-    }
     if(k === 'row'){
-      for(let d=0; d<S.n; d++){ if(S.both) setPair(S.row, d, S.out, S.force); else setRule(S.row, d, S.out, S.force); }
-      lastTouched = null; toast('Riga riempita');
+      for(let d=0; d<S.n; d++) setMeet(S.row, d, S.out, S.force);
+      lastTouched = null; toast('Tutti gli incontri di ' + colName(S.row));
     }
-    if(k === 'clearrow'){ for(let d=0; d<S.n; d++) setRule(S.row, d, KEEP, 0); lastTouched = null; toast('Riga svuotata'); }
+    if(k === 'clearrow'){ for(let d=0; d<S.n; d++) setMeet(S.row, d, KEEP, 0); lastTouched = null; toast('Riga svuotata'); }
     if(k === 'clearall'){ clearRules(); lastTouched = null; toast('Tutte le reazioni tolte'); }
     paintMatrix(); paintRow(); refreshVerdict(); save();
   });
@@ -906,11 +909,11 @@ function wire(){
   });
 
   $('btnReset').onclick = () => {
-    try{ localStorage.removeItem(KEY); localStorage.removeItem(OLDKEY); }catch(e){}
+    try{ localStorage.removeItem(KEY); localStorage.removeItem(OLD2); localStorage.removeItem(OLD1); }catch(e){}
     S.n = 8; S.colors = defaultPalette(8);
     PRESETS.wheel();
     S.neigh8 = false; S.wrap = true; S.fade = true; S.stopOnStasis = true; S.speed = 20;
-    S.row = 0; S.out = 1; S.force = 100; S.both = true; S.brush = 0; lastTouched = null;
+    S.row = 0; S.out = 1; S.force = 100; S.brush = 0; lastTouched = null;
     allocWorld(80, false); fitCanvas();
     syncUI(); buildPalette(); buildMatrix(); buildPicks(); buildBrushes(); buildPaletteUI();
     needsDraw = true; toast('Tutto ripristinato');
@@ -934,7 +937,6 @@ function syncUI(){
   $('rngSpeed').value = S.speed;  $('speedVal').textContent = S.speed;
   $('rngBrush').value = S.brushSize; $('brushSizeVal').textContent = S.brushSize;
   $('rngForce').value = S.force;  $('outForce').textContent = S.force + '%';
-  $('chkBoth').checked = S.both;
   $('chkMoore').checked = S.neigh8;
   $('chkWrap').checked = S.wrap;
   $('chkFade').checked = S.fade;

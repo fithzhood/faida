@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="theme-color" content="#121316">
 <title>Faida</title>
-<link rel="stylesheet" href="faida.css?v=5">
+<link rel="stylesheet" href="faida.css?v=6">
 </head>
 <body>
 
@@ -44,17 +44,15 @@
   <div id="sheetBody">
 
     <div class="panel" id="panelRules">
-      <p class="hint">Ogni casella dice <b>cosa esce</b> quando il colore di una riga tocca il colore di una colonna: pu&ograve; essere uno dei due, un terzo colore, o un muro.</p>
+      <p class="hint">Ogni pixel si espande nelle 4 direzioni: dove raggiunge un colore diverso avviene un <b>incontro</b>. Qui dici cosa ne nasce &mdash; uno dei due, un terzo colore, o macerie. L&apos;incontro &egrave; commutativo, quindi la matrice &egrave; <b>simmetrica</b>: tocchi una casella e si aggiorna anche la sua speculare.</p>
       <div id="matrix"></div>
       <div id="duel" class="duel">
         <div class="verdict" id="duelVerdict"><span>Scegli un esito, poi tocca le caselle: dal loro incontro uscir&agrave; quello.</span></div>
         <div class="pick"><span class="pickLab">l&apos;esito &mdash; cosa ne esce</span><div class="picks" id="pickOut"></div></div>
         <label class="sl force"><span>quanto spesso</span><input type="range" id="rngForce" min="5" max="100" step="5" value="100"><output id="outForce">100%</output></label>
-        <div class="pick"><span class="pickLab">chi arriva</span><div class="picks" id="pickA"></div></div>
+        <div class="pick"><span class="pickLab">il primo colore</span><div class="picks" id="pickA"></div></div>
         <div class="pick"><span class="pickLab" id="rowLab">quando &hellip;</span><div class="rows" id="rowCells"></div></div>
-        <label class="tog"><input type="checkbox" id="chkBoth" checked><span class="box"></span><span>una regola vale nei due sensi</span></label>
-        <div class="quick">
-          <button data-act="sym" id="symBtn">rendi coerenti</button>
+        <div class="quick three">
           <button data-act="row">tutta la riga</button>
           <button data-act="clearrow">svuota riga</button>
           <button data-act="clearall">svuota tutto</button>
@@ -68,10 +66,10 @@
             <option value="rpsls">Sasso-Carta-Forbici-Lucertola-Spock</option>
             <option value="double">Doppia ruota (batte i due dopo)</option>
             <option value="hierarchy">Gerarchia (il forte vince sempre)</option>
-            <option value="factions">Due fazioni</option>
+            <option value="factions">Due fazioni (al confine restano macerie)</option>
             <option value="mix">Mescolanza (esce la tinta in mezzo)</option>
             <option value="alchemy">Alchimia (reazioni sorteggiate)</option>
-            <option value="mutual">Distruzione reciproca</option>
+            <option value="ash">Cenere (ogni incontro lascia macerie)</option>
             <option value="random">Sorteggio</option>
             <option value="empty">Pace totale</option>
           </select>
@@ -114,6 +112,6 @@
   </div>
 </section>
 
-<script src="faida.js?v=5"></script>
+<script src="faida.js?v=6"></script>
 </body>
 </html>

@@ -1,9 +1,10 @@
 # Faida
 
-Un mondo di caselle colorate che reagiscono a contatto. Ogni casella guarda i
-vicini: se una regola dice che da quell'incontro esce qualcosa, cambia colore.
-Ripetuto qualche centinaio di volte, questo produce spirali, labirinti diagonali,
-continenti che si fondono, o il silenzio.
+Un mondo di caselle colorate. **Ogni pixel si espande a ogni passo nelle quattro
+direzioni ortogonali**; dove l'espansione raggiunge un colore diverso avviene un
+**incontro**, e una matrice dice cosa ne nasce. Ripetuto qualche centinaio di
+volte, questo produce spirali, labirinti diagonali, continenti che si fondono, o
+il silenzio.
 
 Vive qui: **https://fithzhood.github.io/faida/faida.html**
 
@@ -23,42 +24,34 @@ ogni incontro era già deciso, ed era sempre uno dei due che si toccavano.
 
 Qui ogni casella della matrice contiene due cose:
 
-- **l'esito** `R[a][d]` — quale colore diventa una casella `d` toccata da un
-  vicino `a`. Può essere `a`, può essere `d`, può essere **un terzo colore
-  qualsiasi**, può essere un **muro**, o niente.
-- **la frequenza** `P[a][d]` — quanto spesso succede, da 0% a 100%.
+- **l'esito** `R[a][b]` — il colore che nasce dall'incontro fra `a` e `b`. Può
+  essere `a`, può essere `b`, può essere **un terzo colore qualsiasi**, possono
+  essere **macerie** (un muro), o niente.
+- **la frequenza** `P[a][b]` — quanto spesso l'incontro riesce, da 0% a 100%.
 
-Quindi *verde + rosso → viola* è una regola esprimibile, e con un tocco su
-"anche al contrario" lo diventano tutti e due. La predazione della ruota
-originale è il caso particolare in cui `R[a][d] = a`.
+Quindi *verde + rosso → viola* è una regola esprimibile: entrambe le caselle
+diventano viola, perché ciascuna delle due si espande verso l'altra e trova
+l'altro colore.
 
-Nota sull'orientamento della matrice: **la riga è il vicino che arriva, la
-colonna è la casella che subisce**. Le due caselle simmetriche descrivono due
-eventi diversi: `R[verde][rosso]` dice cosa diventa il rosso, `R[rosso][verde]`
-cosa diventa il verde.
+## La matrice è simmetrica, ed è giusto così
 
-## La matrice non è simmetrica (e non può esserlo)
+L'incontro è **commutativo**: fra verde e rosso succede una cosa sola, e non
+dipende da chi si è espanso verso chi. Quindi `R[a][b] === R[b][a]` sempre — la
+matrice è simmetrica **per costruzione**, non per disciplina: tocchi una casella
+e la sua speculare si aggiorna con lei. Un incontro a due esiti diversi non è
+rappresentabile, ed è esattamente ciò che si vuole.
 
-La ruota ciclica vive di asimmetria: il rosso mangia l'arancio, ma l'arancio non
-fa niente al rosso. Imporre `R[a][d] = R[d][a]` cancellerebbe il modello di
-partenza.
+**La predazione ci sta dentro senza sforzo**, ed è il punto che sembra
+contraddittorio ma non lo è. L'incontro rosso-arancio produce *rosso*: applicato
+alle due caselle, converte l'arancio e lascia il rosso com'è, perché un esito che
+coincide con il colore già presente non cambia nulla. La ruota ciclica
+dell'originale è quindi perfettamente simmetrica — basta leggerla come "chi vince
+l'incontro" invece che "chi mangia chi", e infatti gira identica.
 
-Però un incontro non deve avere due esiti diversi, e per questo c'è
-l'interruttore **una regola vale nei due sensi** (acceso di default): ogni regola
-che scrivi viene applicata a entrambe le caselle della coppia, quindi è
-impossibile stabilire che *verde+rosso* dia viola da una parte e giallo
-dall'altra — l'ultima parola allinea tutte e due.
-
-Il trucco che lo rende innocuo per la predazione: **una regola il cui esito è già
-il colore della casella non è una regola**, e viene scartata. Scrivere
-"l'arancio toccato dal rosso diventa rosso" nei due sensi produce, sul verso
-opposto, "il rosso toccato dall'arancio diventa rosso" — cioè niente. Per questo
-la ruota ciclica sopravvive intatta anche con l'interruttore acceso.
-
-Spegnendolo, i due sensi tornano indipendenti: servono per la predazione
-asimmetrica e per la distruzione reciproca (dove ognuno converte l'altro a sé).
-Il pulsante **rendi coerenti** allinea in un colpo le coppie discordi già
-presenti — utile dopo *Alchimia*, che ne genera qualcuna.
+L'unica cosa che la commutatività esclude è la distruzione reciproca — *A e B si
+mangiano a vicenda diventando ciascuno sé stesso* — perché sarebbero davvero due
+esiti per un incontro solo. Al suo posto c'è lo schema **Cenere**, dove ciò che
+resta dello scontro sono macerie per entrambi.
 
 ## Come si compone una regola
 
@@ -70,11 +63,13 @@ Nel pannello **Regole**, in tre gesti:
    che mostrano la riga in lavorazione
 
 Il pennello resta armato: scegli viola una volta e picchietti tutte le caselle
-che devono dare viola. Sotto, una frase dice sempre cosa hai appena stabilito —
-*"Verde e Rosso si toccano e diventano Viola tutti e due, sempre"*.
+che devono dare viola. Sotto, una frase dice sempre cosa hai appena stabilito, e
+distingue i due casi che contano:
 
-Le scorciatoie: **anche al contrario** (specchia l'ultima casella), **tutta la
-riga**, **svuota riga**, **svuota tutto**.
+- *"Verde + Rosso → diventano Viola tutti e due, sempre"*
+- *"Rosso + Verde → vince Verde: il rosso diventa verde, sempre"*
+
+Le scorciatoie: **tutta la riga**, **svuota riga**, **svuota tutto**.
 
 ## Gli schemi pronti
 
@@ -85,11 +80,11 @@ riga**, **svuota riga**, **svuota tutto**.
 | ...-Lucertola-Spock | cinque colori, ognuno ne batte due |
 | Doppia ruota | ogni colore batte i due successivi |
 | Gerarchia | il forte vince sempre: si estingue tutto in una decina di passi |
-| Due fazioni | guerra di confine fra due blocchi |
+| Due fazioni | due blocchi che non si conquistano: al confine restano macerie |
 | **Mescolanza** | dall'incontro esce la tinta a metà strada fra le due: nessuno vince, e vengono fuori continenti morbidi invece di spirali |
 | **Alchimia** | reazioni sorteggiate, con terzi colori e cenere (muri che nascono dagli incontri) |
-| Distruzione reciproca | tutti contro tutti al 45% |
-| Sorteggio | relazioni predatorie a caso |
+| Cenere | ogni incontro fra colori diversi lascia macerie: il mondo si cristallizza |
+| Sorteggio | per ogni coppia vince uno dei due, a caso |
 | Pace totale | matrice vuota, da riempire a mano |
 
 ## Le altre due stanze
@@ -128,8 +123,12 @@ passo. Racconta il regime in cui si trova il mondo meglio di qualsiasi immagine.
 - Il mondo prende la forma dello spazio disponibile: non è quadrato.
 - La dissolvenza fra un passo e l'altro usa una tabella di colori miscelati
   precalcolata (6 livelli × 13 stati × 13 stati).
-- Le regole salvate in versione 1 (solo predazione) vengono convertite al volo
-  al nuovo formato.
+- Le regole salvate dalle versioni precedenti vengono convertite al volo, e
+  riportate a simmetria (dove i due sensi divergevano vince quello con la
+  frequenza più alta).
+- Nel preset *Mescolanza* i colori diametralmente opposti hanno **due** punti di
+  mezzo sulla ruota: se ne prende sempre lo stesso, altrimenti la matrice non
+  sarebbe simmetrica.
 - Nessuna dipendenza esterna. Tre file.
 
 ## Vincoli di interfaccia, già pagati
