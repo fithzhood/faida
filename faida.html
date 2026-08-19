@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="theme-color" content="#121316">
 <title>Faida</title>
-<link rel="stylesheet" href="faida.css?v=2">
+<link rel="stylesheet" href="faida.css?v=3">
 </head>
 <body>
 
@@ -44,26 +44,19 @@
   <div id="sheetBody">
 
     <div class="panel" id="panelRules">
-      <p class="hint">La riga <b>attacca</b> la colonna. Tocca una casella per aprire il duello fra quei due colori.</p>
+      <p class="hint">Ogni casella dice <b>cosa esce</b> quando il colore di una riga tocca il colore di una colonna: pu&ograve; essere uno dei due, un terzo colore, o un muro.</p>
       <div id="matrix"></div>
       <div id="duel" class="duel">
-        <div class="duelHead">
-          <span class="chip" id="duelA"><span class="sw"></span><b>&mdash;</b></span>
-          <span class="vs">&#9876;</span>
-          <span class="chip" id="duelB"><span class="sw"></span><b>&mdash;</b></span>
-        </div>
-        <div class="verdict" id="duelVerdict">Tocca una casella della matrice</div>
-        <div class="pick"><span class="pickLab">chi attacca</span><div class="picks" id="pickA"></div></div>
-        <div class="pick"><span class="pickLab">chi subisce</span><div class="picks" id="pickB"></div></div>
-        <div class="sliders">
-          <label class="sl"><span id="labAB">A &rarr; B</span><input type="range" id="rngAB" min="0" max="100" step="5" value="0"><output id="outAB">0%</output></label>
-          <label class="sl"><span id="labBA">B &rarr; A</span><input type="range" id="rngBA" min="0" max="100" step="5" value="0"><output id="outBA">0%</output></label>
-        </div>
+        <div class="verdict" id="duelVerdict"><span>Scegli un esito, poi tocca le caselle: dal loro incontro uscir&agrave; quello.</span></div>
+        <div class="pick"><span class="pickLab">l&apos;esito &mdash; cosa ne esce</span><div class="picks" id="pickOut"></div></div>
+        <label class="sl force"><span>quanto spesso</span><input type="range" id="rngForce" min="5" max="100" step="5" value="100"><output id="outForce">100%</output></label>
+        <div class="pick"><span class="pickLab">chi arriva</span><div class="picks" id="pickA"></div></div>
+        <div class="pick"><span class="pickLab" id="rowLab">quando &hellip;</span><div class="rows" id="rowCells"></div></div>
         <div class="quick">
-          <button data-set="ab">A vince</button>
-          <button data-set="ba">B vince</button>
-          <button data-set="both">reciproco</button>
-          <button data-set="none">indifferenti</button>
+          <button data-act="mirror">anche al contrario</button>
+          <button data-act="row">tutta la riga</button>
+          <button data-act="clearrow">svuota riga</button>
+          <button data-act="clearall">svuota tutto</button>
         </div>
       </div>
       <div class="row">
@@ -75,6 +68,8 @@
             <option value="double">Doppia ruota (batte i due dopo)</option>
             <option value="hierarchy">Gerarchia (il forte vince sempre)</option>
             <option value="factions">Due fazioni</option>
+            <option value="mix">Mescolanza (esce la tinta in mezzo)</option>
+            <option value="alchemy">Alchimia (reazioni sorteggiate)</option>
             <option value="mutual">Distruzione reciproca</option>
             <option value="random">Sorteggio</option>
             <option value="empty">Pace totale</option>
@@ -117,6 +112,6 @@
   </div>
 </section>
 
-<script src="faida.js?v=2"></script>
+<script src="faida.js?v=3"></script>
 </body>
 </html>

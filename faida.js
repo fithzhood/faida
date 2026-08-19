@@ -1,12 +1,16 @@
-/* Faida - automa cellulare a relazioni arbitrarie
-   M[a][d] = probabilita' (0-100) che un vicino di colore `a` converta una cella di colore `d`.
-   La ruota ciclica dell'originale e' solo uno degli schemi possibili. */
+/* Faida - automa cellulare a reazioni arbitrarie
+   Ogni casella della matrice dice COSA ESCE quando un vicino di colore `a`
+   tocca una casella di colore `d`:
+     R[a][d] = colore che ne esce (un colore qualsiasi, il muro, o KEEP = invariato)
+     P[a][d] = quanto spesso, 0-100
+   La predazione (R = a) e la ruota ciclica sono solo casi particolari. */
 (() => {
 'use strict';
 
 const MAXN = 12;
-const WALL = 12;          // stato speciale: non attacca, non e' attaccabile
+const WALL = 12;          // stato speciale: non reagisce e non fa reagire
 const NSTATE = MAXN + 1;  // 0..11 colori + muro
+const KEEP = 255;         // esito "resta com'e'"
 const LEVELS = 6;         // livelli di dissolvenza precalcolati
 
 const $ = (id) => document.getElementById(id);
@@ -15,7 +19,8 @@ const $ = (id) => document.getElementById(id);
 const S = {
   n: 8,
   colors: [],
-  M: new Uint8Array(MAXN * MAXN),
+  R: new Uint8Array(MAXN * MAXN).fill(KEEP),
+  P: new Uint8Array(MAXN * MAXN),
   size: 80,
   w: 80, h: 80,
   grid: null, next: null, prev: null,
@@ -29,7 +34,9 @@ const S = {
   churn: 0,
   brush: 0,
   brushSize: 3,
-  selA: 0, selB: 1,
+  row: 0,        // riga in lavorazione: il vicino che arriva
+  out: 1,        // pennello: l'esito da applicare
+  force: 100,    // pennello: quanto spesso
 };
 
 /* ------------------------------------------------------------ tavolozza */
@@ -59,6 +66,8 @@ function defaultPalette(n){
   return out;
 }
 const WALL_HEX = '#6b7280';
+const colName = (i) => i === WALL ? 'Muro' : (i === KEEP ? 'niente' : (S.colors[i] ? S.colors[i].name : '?'));
+const colHex  = (i) => i === WALL ? WALL_HEX : (S.colors[i] ? S.colors[i].hex : '#2a2d34');
 
 /* --------------------------------------------------------- colori a 32b */
 let pal32 = new Uint32Array(NSTATE);
@@ -93,7 +102,6 @@ function buildPalette(){
 /* ------------------------------------------------------------- il mondo */
 const MAXCELLS = 130000;
 
-// lo spazio davvero disponibile per il mondo, al netto del padding
 function worldBox(){
   const st = $('stage');
   const cs = getComputedStyle(st);
@@ -105,7 +113,6 @@ function worldBox(){
   };
 }
 // il mondo non e' quadrato: prende la forma dello spazio che ha.
-// `size` e' il numero di caselle sul lato corto.
 function gridDims(size){
   const { W, H } = worldBox();
   let w, h;
@@ -148,10 +155,10 @@ function seed(){
 }
 
 /* ---------------------------------------------------------- simulazione */
-const atkS = new Uint8Array(8), atkP = new Uint8Array(8);
+const outS = new Uint8Array(8), outP = new Uint8Array(8);
 
 function doStep(){
-  const { w, h, grid, next, M, n, wrap } = S;
+  const { w, h, grid, next, R, P, wrap } = S;
   const d8 = S.neigh8;
   next.set(grid);
   let changed = 0;
@@ -168,25 +175,35 @@ function doStep(){
       const xRt = x<w-1 ? x+1 : (wrap ? 0 : -1);
 
       let cnt = 0, survive = 1;
-      // --- vicinato di von Neumann
-      if(xLf >= 0){ const s = grid[y*w+xLf];   if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-      if(xRt >= 0){ const s = grid[y*w+xRt];   if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-      if(yUp >= 0){ const s = grid[yUp*w+x];   if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-      if(yDn >= 0){ const s = grid[yDn*w+x];   if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-      // --- diagonali
+      // un vicino `s` propone di trasformare questa casella in R[s][d]
+      const meet = (s) => {
+        if(s === WALL) return;
+        const k = s*MAXN + d;
+        const p = P[k];
+        if(!p) return;
+        const r = R[k];
+        if(r === KEEP || r === d) return;   // esito nullo: non conta come reazione
+        outS[cnt] = r; outP[cnt++] = p;
+        survive *= 1 - p/100;
+      };
+
+      if(xLf >= 0) meet(grid[y*w+xLf]);
+      if(xRt >= 0) meet(grid[y*w+xRt]);
+      if(yUp >= 0) meet(grid[yUp*w+x]);
+      if(yDn >= 0) meet(grid[yDn*w+x]);
       if(d8){
-        if(xLf>=0 && yUp>=0){ const s = grid[yUp*w+xLf]; if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-        if(xRt>=0 && yUp>=0){ const s = grid[yUp*w+xRt]; if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-        if(xLf>=0 && yDn>=0){ const s = grid[yDn*w+xLf]; if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
-        if(xRt>=0 && yDn>=0){ const s = grid[yDn*w+xRt]; if(s !== WALL){ const p = M[s*MAXN+d]; if(p){ atkS[cnt]=s; atkP[cnt++]=p; survive *= 1 - p/100; } } }
+        if(xLf>=0 && yUp>=0) meet(grid[yUp*w+xLf]);
+        if(xRt>=0 && yUp>=0) meet(grid[yUp*w+xRt]);
+        if(xLf>=0 && yDn>=0) meet(grid[yDn*w+xLf]);
+        if(xRt>=0 && yDn>=0) meet(grid[yDn*w+xRt]);
       }
       if(cnt === 0) continue;
-      if(survive > 0 && Math.random() < survive) continue;   // il difensore regge
+      if(survive > 0 && Math.random() < survive) continue;   // la casella regge
 
       let tot = 0;
-      for(let k=0;k<cnt;k++) tot += atkP[k];
-      let r = Math.random() * tot, win = atkS[0];
-      for(let k=0;k<cnt;k++){ r -= atkP[k]; if(r <= 0){ win = atkS[k]; break; } }
+      for(let k=0;k<cnt;k++) tot += outP[k];
+      let r = Math.random() * tot, win = outS[0];
+      for(let k=0;k<cnt;k++){ r -= outP[k]; if(r <= 0){ win = outS[k]; break; } }
       if(win !== d){ next[i] = win; changed++; }
     }
   }
@@ -219,7 +236,6 @@ function fitCanvas(){
   ctx.imageSmoothingEnabled = false;
   needsDraw = true;
 }
-// il mondo segue la forma della finestra: se cambia molto, si rialloca tenendo il contenuto
 function relayout(){
   const [w, h] = gridDims(S.size);
   if(w !== S.w || h !== S.h) allocWorld(S.size, true);
@@ -294,7 +310,7 @@ function frame(now){
     if(acc > per*6) acc = 0;
   }
 
-  if(S.running || stepped || needsDraw || S.fade){
+  if(S.running || stepped || needsDraw){
     render(S.running ? Math.min(1, acc/per) : 1);
     needsDraw = false;
   }
@@ -311,7 +327,6 @@ function setRunning(v){
   b.querySelector('span').textContent = v ? 'pausa' : 'avvia';
   if(v) stasisRun = 0;
 }
-
 // se si era fermata da sola nella quiete, un mondo nuovo la fa ripartire;
 // una pausa chiesta dall'utente invece si rispetta
 function wakeIfStalled(){ if(stoppedByStasis && !S.running) setRunning(true); }
@@ -325,37 +340,73 @@ function toast(msg){
   toastTimer = setTimeout(() => { el.hidden = true; }, 1900);
 }
 
-/* --------------------------------------------------------- gli schemi */
-function clearM(){ S.M.fill(0); }
-function setM(a,d,p){ if(a!==d && a<S.n && d<S.n) S.M[a*MAXN+d] = p; }
-function getM(a,d){ return S.M[a*MAXN+d]; }
+/* ----------------------------------------------------------- le regole */
+function getR(a,d){ return S.R[a*MAXN+d]; }
+function getP(a,d){ return S.P[a*MAXN+d]; }
+function setRule(a,d,out,p){
+  if(a >= S.n || d >= S.n || a === d) return;
+  if(out === KEEP || p <= 0){ S.R[a*MAXN+d] = KEEP; S.P[a*MAXN+d] = 0; return; }
+  S.R[a*MAXN+d] = out;
+  S.P[a*MAXN+d] = p;
+}
+function clearRules(){ S.R.fill(KEEP); S.P.fill(0); }
+
+// il colore a meta' strada fra due, sull'arco piu' corto della ruota
+function midHue(a, d, n){
+  let diff = ((d - a) % n + n) % n;
+  if(diff > n/2) diff -= n;
+  return (((a + Math.round(diff/2)) % n) + n) % n;
+}
 
 const PRESETS = {
-  wheel(){ clearM(); for(let i=0;i<S.n;i++) setM(i,(i+1)%S.n,100); },
-  double(){ clearM(); for(let i=0;i<S.n;i++){ setM(i,(i+1)%S.n,100); setM(i,(i+2)%S.n,100); } },
-  rps(){ setN(3); clearM(); for(let i=0;i<3;i++) setM(i,(i+1)%3,100); },
-  rpsls(){ setN(5); clearM(); for(let i=0;i<5;i++){ setM(i,(i+1)%5,100); setM(i,(i+2)%5,100); } },
-  hierarchy(){ clearM(); for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++) setM(i,j,100); },
+  wheel(){ clearRules(); for(let i=0;i<S.n;i++) setRule(i,(i+1)%S.n,i,100); },
+  double(){ clearRules(); for(let i=0;i<S.n;i++){ setRule(i,(i+1)%S.n,i,100); setRule(i,(i+2)%S.n,i,100); } },
+  rps(){ setN(3); clearRules(); for(let i=0;i<3;i++) setRule(i,(i+1)%3,i,100); },
+  rpsls(){ setN(5); clearRules(); for(let i=0;i<5;i++){ setRule(i,(i+1)%5,i,100); setRule(i,(i+2)%5,i,100); } },
+  hierarchy(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++) setRule(i,j,i,100); },
   factions(){
-    clearM();
+    clearRules();
     const half = Math.ceil(S.n/2);
     for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++){
-      if((i<half) !== (j<half)) setM(i,j,70);
+      if((i<half) !== (j<half)) setRule(i,j,i,70);
     }
   },
-  mutual(){ clearM(); for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++) if(i!==j) setM(i,j,45); },
+  mutual(){ clearRules(); for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++) if(i!==j) setRule(i,j,i,45); },
+  // dall'incontro esce la tinta che sta in mezzo: nessuno vince, si mescolano
+  mix(){
+    clearRules();
+    for(let a=0;a<S.n;a++) for(let d=0;d<S.n;d++){
+      if(a === d) continue;
+      const m = midHue(a, d, S.n);
+      if(m !== d) setRule(a, d, m, 55);
+    }
+  },
+  // reazioni sorteggiate: l'esito puo' essere un terzo colore, o cenere
+  alchemy(){
+    clearRules();
+    for(let a=0;a<S.n;a++) for(let d=0;d<S.n;d++){
+      if(a === d || Math.random() < 0.45) continue;
+      let out;
+      const r = Math.random();
+      if(r < 0.45) out = (Math.random()*S.n)|0;      // un colore qualsiasi
+      else if(r < 0.85) out = a;                      // predazione
+      else out = WALL;                                // cenere
+      if(out === d) continue;
+      setRule(a, d, out, 25 + ((Math.random()*4)|0)*25);
+    }
+  },
   random(){
-    clearM();
+    clearRules();
     for(let i=0;i<S.n;i++) for(let j=i+1;j<S.n;j++){
       const r = Math.random();
-      const p = 25 + ((Math.random()*4)|0)*25;   // 25 50 75 100
-      if(r < 0.34) { /* indifferenti */ }
-      else if(r < 0.62) setM(i,j,p);
-      else if(r < 0.90) setM(j,i,p);
-      else { setM(i,j,p); setM(j,i,25 + ((Math.random()*3)|0)*25); }
+      const p = 25 + ((Math.random()*4)|0)*25;
+      if(r < 0.34) continue;
+      else if(r < 0.62) setRule(i,j,i,p);
+      else if(r < 0.90) setRule(j,i,j,p);
+      else { setRule(i,j,i,p); setRule(j,i,j,25 + ((Math.random()*3)|0)*25); }
     }
   },
-  empty(){ clearM(); }
+  empty(){ clearRules(); }
 };
 
 /* ------------------------------------------------------------- matrice */
@@ -368,8 +419,8 @@ function buildMatrix(){
 
   const corner = document.createElement('div');
   corner.className = 'mc hd corner';
-  corner.innerHTML = '&#9876;';
-  corner.title = 'la riga attacca la colonna';
+  corner.innerHTML = '&#8600;';
+  corner.title = 'riga: il vicino che arriva. colonna: la casella che subisce';
   frag.appendChild(corner);
 
   for(let d=0; d<n; d++) frag.appendChild(headCell(d));
@@ -410,86 +461,122 @@ function paintMatrix(){
   const box = $('matrix');
   for(const cell of box.querySelectorAll('.mc[data-a]')){
     const a = +cell.dataset.a, d = +cell.dataset.d;
-    cell.classList.toggle('sel', a === S.selA && d === S.selB);
-    cell.classList.toggle('selpair', a === S.selB && d === S.selA);
+    cell.classList.toggle('inrow', a === S.row);
     if(a === d) continue;
-    const p = getM(a,d);
+    const r = getR(a,d), p = getP(a,d);
     const fill = cell.firstChild, num = cell.lastChild;
-    fill.style.background = S.colors[a].hex;
-    fill.style.opacity = p ? (0.16 + 0.84*p/100).toFixed(2) : '0';
-    num.textContent = (p > 0 && p < 100) ? p : '';
+    const live = (r !== KEEP && p > 0);
+    fill.style.background = live ? colHex(r) : 'transparent';
+    fill.style.opacity = live ? (0.2 + 0.8*p/100).toFixed(2) : '0';
+    num.textContent = (live && p < 100) ? p : '';
   }
-  // le pastiglie di intestazione seguono la tavolozza
   const heads = box.querySelectorAll('.mc.hd .dot');
   heads.forEach((dot, k) => { dot.style.background = S.colors[k % S.n].hex; });
 }
 
-/* -------------------------------------------------------------- duello */
-function verdictText(a, b, A, B){
-  const na = S.colors[A].name, nb = S.colors[B].name;
-  if(!a && !b) return 'Indifferenti: si sfiorano e non succede nulla.';
-  if(a && !b) return `<b>${na}</b> conquista <b>${nb}</b>` + (a === 100 ? ' a ogni contatto.' : ` nel ${a}% dei contatti.`);
-  if(!a && b) return `<b>${nb}</b> conquista <b>${na}</b>` + (b === 100 ? ' a ogni contatto.' : ` nel ${b}% dei contatti.`);
-  if(a === b) return `Si divorano a vicenda, alla pari (${a}%).`;
-  const [w, l, pw, pl] = a > b ? [na, nb, a, b] : [nb, na, b, a];
-  return `Si divorano a vicenda: <b>${w}</b> ha la meglio (${pw}% contro ${pl}%).`;
-}
-function refreshDuel(){
-  const A = S.selA, B = S.selB;
-  const ab = getM(A,B), ba = getM(B,A);
-  const ca = S.colors[A], cb = S.colors[B];
-
-  const chipA = $('duelA'), chipB = $('duelB');
-  chipA.querySelector('.sw').style.background = ca.hex;
-  chipA.querySelector('b').textContent = ca.name;
-  chipB.querySelector('.sw').style.background = cb.hex;
-  chipB.querySelector('b').textContent = cb.name;
-
-  $('labAB').textContent = `${ca.name} → ${cb.name}`;
-  $('labBA').textContent = `${cb.name} → ${ca.name}`;
-  $('rngAB').value = ab; $('outAB').textContent = ab + '%';
-  $('rngBA').value = ba; $('outBA').textContent = ba + '%';
-  $('duelVerdict').innerHTML = '<span>' + verdictText(ab, ba, A, B) + '</span>';
-}
-function selectPair(a, d){
-  if(a === d) return;
-  S.selA = a; S.selB = d;
-  paintMatrix(); paintPicks(); refreshDuel();
-}
+/* ------------------------------------------------- pennello e riga viva */
 function pickCols(n){
   if(n <= 6) return n;
   return Math.min(6, Math.ceil(n/2));
 }
+function swatch(i, cls){
+  const b = document.createElement('button');
+  b.className = cls;
+  b.dataset.i = i;
+  b.title = colName(i);
+  b.setAttribute('aria-label', colName(i));
+  b.innerHTML = `<span class="sw" style="background:${colHex(i)}"></span>`;
+  return b;
+}
 function buildPicks(){
-  const cols = pickCols(S.n);
-  for(const [box, sel] of [[$('pickA'),'selA'], [$('pickB'),'selB']]){
-    box.innerHTML = '';
-    box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    for(let i=0;i<S.n;i++){
-      const b = document.createElement('button');
-      b.className = 'pk';
-      b.dataset.i = i;
-      b.title = S.colors[i].name;
-      b.setAttribute('aria-label', S.colors[i].name);
-      b.innerHTML = `<span class="sw" style="background:${S.colors[i].hex}"></span>`;
-      box.appendChild(b);
-    }
-  }
+  // il pennello: ogni colore, il muro, oppure "niente"
+  const boxO = $('pickOut');
+  boxO.style.gridTemplateColumns = `repeat(${pickCols(S.n + 2)}, 1fr)`;
+  boxO.innerHTML = '';
+  for(let i=0;i<S.n;i++) boxO.appendChild(swatch(i, 'pk'));
+  boxO.appendChild(swatch(WALL, 'pk'));
+  const none = swatch(KEEP, 'pk none');
+  none.innerHTML = '<span class="sw nil">&#8709;</span>';
+  boxO.appendChild(none);
+
+  // la riga in lavorazione
+  const boxA = $('pickA');
+  boxA.style.gridTemplateColumns = `repeat(${pickCols(S.n)}, 1fr)`;
+  boxA.innerHTML = '';
+  for(let i=0;i<S.n;i++) boxA.appendChild(swatch(i, 'pk'));
+
+  buildRow();
   paintPicks();
 }
+// le caselle grandi: per il vicino scelto, cosa succede su ogni colore
+function buildRow(){
+  const box = $('rowCells');
+  box.style.gridTemplateColumns = `repeat(${Math.min(4, Math.max(2, S.n))}, 1fr)`;
+  box.innerHTML = '';
+  for(let d=0; d<S.n; d++){
+    const b = document.createElement('button');
+    b.className = 'rc';
+    b.dataset.d = d;
+    b.innerHTML =
+      `<span class="sw sd"></span><span class="arr">&#8594;</span>` +
+      `<span class="sw so"></span><small class="pc"></small>`;
+    box.appendChild(b);
+  }
+  paintRow();
+}
+function paintRow(){
+  const a = S.row;
+  $('rowLab').innerHTML = `quando <b>${colName(a)}</b> tocca &hellip;`;
+  for(const b of $('rowCells').children){
+    const d = +b.dataset.d;
+    const r = getR(a,d), p = getP(a,d);
+    const live = (r !== KEEP && p > 0 && a !== d);
+    b.classList.toggle('self', a === d);
+    b.querySelector('.sd').style.background = colHex(d);
+    const so = b.querySelector('.so');
+    so.style.background = live ? colHex(r) : 'transparent';
+    so.classList.toggle('empty', !live);
+    b.querySelector('.pc').textContent = (a === d) ? 'sé' : (live ? (p < 100 ? p + '%' : '') : 'niente');
+  }
+}
 function paintPicks(){
-  for(const [box, cur, other] of [[$('pickA'), S.selA, S.selB], [$('pickB'), S.selB, S.selA]]){
-    for(const b of box.children){
-      const i = +b.dataset.i;
-      b.classList.toggle('on', i === cur);
-      b.classList.toggle('dim', i === other);
-      const sw = b.firstChild;
-      if(sw) sw.style.background = S.colors[i].hex;
-    }
+  for(const b of $('pickA').children) b.classList.toggle('on', +b.dataset.i === S.row);
+  for(const b of $('pickOut').children) b.classList.toggle('on', +b.dataset.i === S.out);
+  paintRow();
+  refreshVerdict();
+}
+
+let lastTouched = null;   // [a,d] dell'ultima casella applicata
+function refreshVerdict(){
+  const el = $('duelVerdict');
+  if(!lastTouched){
+    el.innerHTML = `<span>Scegli un esito, poi tocca le caselle: dal loro incontro uscirà quello.</span>`;
+    return;
+  }
+  const [a,d] = lastTouched;
+  const r = getR(a,d), p = getP(a,d);
+  const na = colName(a), nd = colName(d);
+  if(r === KEEP || p === 0){
+    el.innerHTML = `<span>Un vicino <b>${na}</b> non fa niente a <b>${nd}</b>.</span>`;
+    return;
+  }
+  const quando = p === 100 ? 'sempre' : `nel ${p}% dei contatti`;
+  const back = getR(d,a), backP = getP(d,a);
+  if(back === r && backP === p){
+    el.innerHTML = `<span><b>${na}</b> e <b>${nd}</b> si toccano e diventano <b>${colName(r)}</b> tutti e due, ${quando}.</span>`;
+  } else {
+    el.innerHTML = `<span><b>${nd}</b> toccato da <b>${na}</b> diventa <b>${colName(r)}</b>, ${quando}.</span>`;
   }
 }
 
-/* ------------------------------------------------------ pennelli, tavolozza */
+function applyBrush(a, d){
+  if(a === d || a >= S.n || d >= S.n) return;
+  setRule(a, d, S.out, S.force);
+  lastTouched = [a,d];
+  paintMatrix(); paintRow(); refreshVerdict(); save();
+}
+
+/* ------------------------------------------------------ pennelli mondo */
 function buildBrushes(){
   const box = $('brushes');
   box.innerHTML = '';
@@ -550,7 +637,6 @@ cv.addEventListener('pointermove', ev => {
   if(!painting) return;
   const c = cellFromEvent(ev);
   if(!c) return;
-  // interpola fra l'ultimo punto e questo, cosi' il tratto non ha buchi
   if(lastCell){
     const [x0,y0] = lastCell, [x1,y1] = c;
     const steps = Math.max(Math.abs(x1-x0), Math.abs(y1-y0));
@@ -567,31 +653,54 @@ cv.addEventListener('pointerup', endPaint);
 cv.addEventListener('pointercancel', endPaint);
 
 /* ------------------------------------------------------------ persistenza */
-const KEY = 'faida.v1';
+const KEY = 'faida.v2', OLDKEY = 'faida.v1';
 function save(){
   try{
     localStorage.setItem(KEY, JSON.stringify({
-      n: S.n, colors: S.colors, M: Array.from(S.M), size: S.size,
-      neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
+      n: S.n, colors: S.colors,
+      R: Array.from(S.R), P: Array.from(S.P),
+      size: S.size, neigh8: S.neigh8, wrap: S.wrap, fade: S.fade,
       stopOnStasis: S.stopOnStasis, speed: S.speed
     }));
   }catch(e){}
 }
+function loadCommon(d){
+  S.n = Math.min(MAXN, Math.max(2, d.n|0 || 8));
+  S.colors = (d.colors || []).slice(0, S.n);
+  const fb = defaultPalette(S.n);
+  while(S.colors.length < S.n) S.colors.push(fb[S.colors.length]);
+  S.size = Math.min(240, Math.max(20, d.size|0 || 80));
+  S.neigh8 = !!d.neigh8; S.wrap = d.wrap !== false;
+  S.fade = d.fade !== false; S.stopOnStasis = d.stopOnStasis !== false;
+  S.speed = Math.min(60, Math.max(1, d.speed|0 || 20));
+}
 function load(){
   try{
     const raw = localStorage.getItem(KEY);
-    if(!raw) return false;
-    const d = JSON.parse(raw);
-    if(!d || !d.colors || !Array.isArray(d.M)) return false;
-    S.n = Math.min(MAXN, Math.max(2, d.n|0 || 8));
-    S.colors = d.colors.slice(0, S.n);
-    while(S.colors.length < S.n) S.colors.push(defaultPalette(S.n)[S.colors.length]);
-    S.M.set(d.M.slice(0, MAXN*MAXN));
-    S.size = Math.min(240, Math.max(20, d.size|0 || 80));
-    S.neigh8 = !!d.neigh8; S.wrap = d.wrap !== false;
-    S.fade = d.fade !== false; S.stopOnStasis = d.stopOnStasis !== false;
-    S.speed = Math.min(60, Math.max(1, d.speed|0 || 20));
-    return true;
+    if(raw){
+      const d = JSON.parse(raw);
+      if(!d || !Array.isArray(d.R) || !Array.isArray(d.P)) return false;
+      loadCommon(d);
+      S.R.set(d.R.slice(0, MAXN*MAXN));
+      S.P.set(d.P.slice(0, MAXN*MAXN));
+      return true;
+    }
+    // le regole vecchie erano solo di predazione: l'esito era il vicino stesso
+    const old = localStorage.getItem(OLDKEY);
+    if(old){
+      const d = JSON.parse(old);
+      if(!d || !Array.isArray(d.M)) return false;
+      loadCommon(d);
+      clearRules();
+      for(let a=0;a<S.n;a++) for(let dd=0;dd<S.n;dd++){
+        const p = d.M[a*MAXN+dd] | 0;
+        if(p > 0) setRule(a, dd, a, p);
+      }
+      localStorage.removeItem(OLDKEY);
+      save();
+      return true;
+    }
+    return false;
   }catch(e){ return false; }
 }
 
@@ -601,14 +710,20 @@ function setN(n){
   if(n === S.n) return;
   S.n = n;
   S.colors = defaultPalette(n);
-  // taglia le relazioni verso colori non piu' esistenti
-  for(let a=0;a<MAXN;a++) for(let d=0;d<MAXN;d++) if(a>=n || d>=n) S.M[a*MAXN+d] = 0;
-  if(S.selA >= n) S.selA = 0;
-  if(S.selB >= n) S.selB = 1 % n;
+  for(let a=0;a<MAXN;a++) for(let d=0;d<MAXN;d++){
+    const k = a*MAXN+d;
+    if(a>=n || d>=n){ S.R[k] = KEEP; S.P[k] = 0; }
+    else if(S.R[k] !== KEEP && S.R[k] !== WALL && S.R[k] >= n){
+      S.R[k] = KEEP; S.P[k] = 0;   // l'esito puntava a un colore sparito
+    }
+  }
+  if(S.row >= n) S.row = 0;
+  if(S.out !== KEEP && S.out !== WALL && S.out >= n) S.out = 0;
   if(S.brush !== WALL && S.brush >= n) S.brush = 0;
+  lastTouched = null;
   const g = S.grid;
   if(g) for(let i=0;i<g.length;i++) if(g[i] !== WALL && g[i] >= n) g[i] = (Math.random()*n)|0;
-  buildPalette(); buildMatrix(); buildPicks(); refreshDuel(); buildBrushes(); buildPaletteUI();
+  buildPalette(); buildMatrix(); buildPicks(); buildBrushes(); buildPaletteUI();
   $('rngN').value = n; $('nColorsVal').textContent = n;
   needsDraw = true;
 }
@@ -636,44 +751,56 @@ function wire(){
   document.querySelectorAll('[data-panel]').forEach(b => b.onclick = () => openPanel(b.dataset.panel));
   $('sheetClose').onclick = closePanel;
 
+  // la mappa e' anche una superficie da dipingere: un tocco applica il pennello
   $('matrix').addEventListener('click', ev => {
     const cell = ev.target.closest('.mc[data-a]');
     if(!cell || cell.classList.contains('diag')) return;
-    selectPair(+cell.dataset.a, +cell.dataset.d);
+    S.row = +cell.dataset.a;
+    applyBrush(+cell.dataset.a, +cell.dataset.d);
+    paintPicks();
   });
 
   $('pickA').addEventListener('click', ev => {
     const b = ev.target.closest('.pk'); if(!b) return;
-    const a = +b.dataset.i;
-    selectPair(a, a === S.selB ? (a + 1) % S.n : S.selB);
+    S.row = +b.dataset.i;
+    lastTouched = null;
+    paintMatrix(); paintPicks();
   });
-  $('pickB').addEventListener('click', ev => {
+  $('pickOut').addEventListener('click', ev => {
     const b = ev.target.closest('.pk'); if(!b) return;
-    const d = +b.dataset.i;
-    selectPair(d === S.selA ? (d + 1) % S.n : S.selA, d);
+    S.out = +b.dataset.i;
+    paintPicks();
+  });
+  $('rowCells').addEventListener('click', ev => {
+    const b = ev.target.closest('.rc'); if(!b) return;
+    applyBrush(S.row, +b.dataset.d);
   });
 
-  const onSlider = (which) => (ev) => {
-    const v = +ev.target.value;
-    if(which === 'ab') setM(S.selA, S.selB, v); else setM(S.selB, S.selA, v);
-    paintMatrix(); refreshDuel(); save();
-  };
-  $('rngAB').addEventListener('input', onSlider('ab'));
-  $('rngBA').addEventListener('input', onSlider('ba'));
+  $('rngForce').addEventListener('input', ev => {
+    S.force = +ev.target.value;
+    $('outForce').textContent = S.force + '%';
+  });
 
   document.querySelectorAll('.quick button').forEach(b => b.onclick = () => {
-    const k = b.dataset.set;
-    if(k === 'ab'){ setM(S.selA,S.selB,100); setM(S.selB,S.selA,0); }
-    if(k === 'ba'){ setM(S.selB,S.selA,100); setM(S.selA,S.selB,0); }
-    if(k === 'both'){ setM(S.selA,S.selB,50); setM(S.selB,S.selA,50); }
-    if(k === 'none'){ setM(S.selA,S.selB,0); setM(S.selB,S.selA,0); }
-    paintMatrix(); refreshDuel(); save();
+    const k = b.dataset.act;
+    if(k === 'mirror'){
+      if(!lastTouched){ toast('Prima tocca una casella'); return; }
+      const [a,d] = lastTouched;
+      setRule(d, a, getR(a,d), getP(a,d));
+      toast('Vale anche al contrario');
+    }
+    if(k === 'row'){ for(let d=0; d<S.n; d++) setRule(S.row, d, S.out, S.force); lastTouched = null; toast('Riga riempita'); }
+    if(k === 'clearrow'){ for(let d=0; d<S.n; d++) setRule(S.row, d, KEEP, 0); lastTouched = null; toast('Riga svuotata'); }
+    if(k === 'clearall'){ clearRules(); lastTouched = null; toast('Tutte le reazioni tolte'); }
+    paintMatrix(); paintRow(); refreshVerdict(); save();
   });
 
   $('btnApplyPreset').onclick = () => {
     const k = $('selPreset').value;
     (PRESETS[k] || PRESETS.wheel)();
-    paintMatrix(); refreshDuel(); save();
+    lastTouched = null;
+    paintMatrix(); buildPicks(); save();
+    wakeIfStalled();
     toast('Schema applicato');
   };
 
@@ -713,10 +840,7 @@ function wire(){
   $('rngN').addEventListener('input', ev => { $('nColorsVal').textContent = ev.target.value; });
   $('rngN').addEventListener('change', ev => { setN(+ev.target.value); save(); });
   $('rngSize').addEventListener('input', ev => { $('sizeVal').textContent = ev.target.value; });
-  $('rngSize').addEventListener('change', ev => {
-    allocWorld(+ev.target.value, false);
-    fitCanvas(); save();
-  });
+  $('rngSize').addEventListener('change', ev => { allocWorld(+ev.target.value, false); fitCanvas(); save(); });
   $('rngSpeed').addEventListener('input', ev => {
     S.speed = +ev.target.value; $('speedVal').textContent = S.speed; save();
   });
@@ -731,17 +855,17 @@ function wire(){
     const i = +inp.dataset.ci;
     S.colors[i].hex = inp.value;
     inp.parentElement.style.background = inp.value;
-    buildPalette(); paintMatrix(); paintPicks(); refreshDuel(); buildBrushes(); needsDraw = true; save();
+    buildPalette(); paintMatrix(); buildPicks(); buildBrushes(); needsDraw = true; save();
   });
 
   $('btnReset').onclick = () => {
-    try{ localStorage.removeItem(KEY); }catch(e){}
+    try{ localStorage.removeItem(KEY); localStorage.removeItem(OLDKEY); }catch(e){}
     S.n = 8; S.colors = defaultPalette(8);
     PRESETS.wheel();
     S.neigh8 = false; S.wrap = true; S.fade = true; S.stopOnStasis = true; S.speed = 20;
-    S.selA = 0; S.selB = 1; S.brush = 0;
+    S.row = 0; S.out = 1; S.force = 100; S.brush = 0; lastTouched = null;
     allocWorld(80, false); fitCanvas();
-    syncUI(); buildPalette(); buildMatrix(); buildPicks(); refreshDuel(); buildBrushes(); buildPaletteUI();
+    syncUI(); buildPalette(); buildMatrix(); buildPicks(); buildBrushes(); buildPaletteUI();
     needsDraw = true; toast('Tutto ripristinato');
   };
 
@@ -752,7 +876,7 @@ function wire(){
     if(ev.target.matches('input,select,textarea')) return;
     if(ev.code === 'Space'){ ev.preventDefault(); setRunning(!S.running); }
     if(ev.key === 'n' || ev.key === 'ArrowRight'){ setRunning(false); doStep(); needsDraw = true; }
-    if(ev.key === 'r'){ seed(); needsDraw = true; }
+    if(ev.key === 'r'){ seed(); wakeIfStalled(); needsDraw = true; }
     if(ev.key === 'Escape') closePanel();
   });
 }
@@ -762,6 +886,7 @@ function syncUI(){
   $('rngSize').value = S.size;    $('sizeVal').textContent = S.size;
   $('rngSpeed').value = S.speed;  $('speedVal').textContent = S.speed;
   $('rngBrush').value = S.brushSize; $('brushSizeVal').textContent = S.brushSize;
+  $('rngForce').value = S.force;  $('outForce').textContent = S.force + '%';
   $('chkMoore').checked = S.neigh8;
   $('chkWrap').checked = S.wrap;
   $('chkFade').checked = S.fade;
@@ -782,7 +907,7 @@ function boot(){
   allocWorld(S.size, false);
   fitCanvas();
   syncUI();
-  buildMatrix(); buildPicks(); refreshDuel(); buildBrushes(); buildPaletteUI();
+  buildMatrix(); buildPicks(); buildBrushes(); buildPaletteUI();
   wire();
   setRunning(true);
   requestAnimationFrame(frame);
