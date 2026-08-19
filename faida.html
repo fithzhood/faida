@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="theme-color" content="#121316">
 <title>Faida</title>
-<link rel="stylesheet" href="faida.css?v=3">
+<link rel="stylesheet" href="faida.css?v=4">
 </head>
 <body>
 
@@ -80,12 +80,13 @@
     </div>
 
     <div class="panel" id="panelDraw" hidden>
-      <p class="hint">Scegli cosa dipingere, poi trascina il dito sul mondo.</p>
+      <p class="hint">Scegli cosa dipingere, poi trascina il dito sul mondo. <b>Svuota</b> ferma tutto e ti lascia una tela di muri: disegni con calma e poi premi avvia.</p>
       <div id="brushes"></div>
       <label class="fld"><span>ampiezza del pennello: <b id="brushSizeVal">3</b></span>
         <input type="range" id="rngBrush" min="1" max="20" step="1" value="3"></label>
       <div class="row wrap">
-        <button id="btnFill" class="go alt">riempi tutto</button>
+        <button id="btnClear" class="go alt">svuota</button>
+        <button id="btnFill" class="go alt">riempi col pennello</button>
         <button id="btnBox" class="go alt">cornice di muri</button>
         <button id="btnBlob" class="go alt">semina a macchie</button>
       </div>
@@ -112,6 +113,6 @@
   </div>
 </section>
 
-<script src="faida.js?v=3"></script>
+<script src="faida.js?v=4"></script>
 </body>
 </html>

@@ -814,7 +814,21 @@ function wire(){
     S.brushSize = +ev.target.value;
     $('brushSizeVal').textContent = S.brushSize;
   });
-  $('btnFill').onclick = () => { S.grid.fill(S.brush); S.prev.set(S.grid); needsDraw = true; toast('Riempito'); };
+  // tela pulita: tutto muro, e ferma, cosi' si disegna con calma
+  $('btnClear').onclick = () => {
+    S.grid.fill(WALL); S.prev.set(S.grid);
+    S.step = 0; S.churn = 0; stasisRun = 0; stoppedByStasis = false;
+    setRunning(false);
+    needsDraw = true; updateStats(performance.now());
+    toast('Tela vuota — disegna, poi premi avvia');
+  };
+  $('btnFill').onclick = () => {
+    S.grid.fill(S.brush); S.prev.set(S.grid);
+    S.step = 0; S.churn = 0; stasisRun = 0; stoppedByStasis = false;
+    setRunning(false);
+    needsDraw = true; updateStats(performance.now());
+    toast('Riempito di ' + colName(S.brush) + ' — disegna, poi premi avvia');
+  };
   $('btnBox').onclick = () => {
     const { w, h, grid } = S;
     for(let x=0;x<w;x++){ grid[x] = WALL; grid[(h-1)*w+x] = WALL; }

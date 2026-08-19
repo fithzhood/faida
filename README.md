@@ -72,8 +72,10 @@ riga**, **svuota riga**, **svuota tutto**.
 ## Le altre due stanze
 
 - **Disegna** — scegli un colore (o il **muro**, che non reagisce e non fa
-  reagire) e trascina il dito sul mondo. Serve per costruire barriere e vedere
-  come si incanalano i fronti.
+  reagire) e trascina il dito sul mondo. **Svuota** ferma la simulazione e
+  lascia una tela di soli muri: ci si disegna con calma la configurazione
+  voluta e poi si preme avvia. **Riempi col pennello** fa lo stesso ma con il
+  colore scelto, se serve un fondo che partecipa invece di uno inerte.
 - **Mondo** — quanti colori (2-12), quanto è fitta la griglia, la velocità, il
   vicinato a 4 o a 8, i bordi che si richiudono, e la tavolozza.
 
