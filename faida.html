@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="theme-color" content="#121316">
+<title>Faida</title>
+<link rel="stylesheet" href="faida.css?v=2">
+</head>
+<body>
+
+<header id="hud">
+  <h1>Faida</h1>
+  <div class="stats">
+    <div class="stat"><b id="statStep">0</b><small>passi</small></div>
+    <div class="stat"><b id="statChurn">—</b><small>attrito</small></div>
+    <div class="stat"><b id="statAlive">—</b><small>colori</small></div>
+  </div>
+</header>
+
+<main id="stage">
+  <canvas id="board"></canvas>
+  <div id="toast" hidden></div>
+</main>
+
+<div id="pop" title="popolazione"></div>
+
+<nav id="bar">
+  <button id="btnPlay" class="tbtn primary"><i>&#9654;</i><span>avvia</span></button>
+  <button id="btnStep" class="tbtn"><i>&#9193;</i><span>passo</span></button>
+  <button id="btnSeed" class="tbtn"><i>&#8635;</i><span>rigenera</span></button>
+  <button class="tbtn" data-panel="rules"><i>&#9876;</i><span>regole</span></button>
+  <button class="tbtn" data-panel="draw"><i>&#9998;</i><span>disegna</span></button>
+  <button class="tbtn" data-panel="world"><i>&#9881;</i><span>mondo</span></button>
+</nav>
+
+<section id="sheet" hidden>
+  <div id="sheetHead">
+    <h2 id="sheetTitle">Regole</h2>
+    <button id="sheetClose" aria-label="chiudi">&#10005;</button>
+  </div>
+  <div id="sheetBody">
+
+    <div class="panel" id="panelRules">
+      <p class="hint">La riga <b>attacca</b> la colonna. Tocca una casella per aprire il duello fra quei due colori.</p>
+      <div id="matrix"></div>
+      <div id="duel" class="duel">
+        <div class="duelHead">
+          <span class="chip" id="duelA"><span class="sw"></span><b>&mdash;</b></span>
+          <span class="vs">&#9876;</span>
+          <span class="chip" id="duelB"><span class="sw"></span><b>&mdash;</b></span>
+        </div>
+        <div class="verdict" id="duelVerdict">Tocca una casella della matrice</div>
+        <div class="pick"><span class="pickLab">chi attacca</span><div class="picks" id="pickA"></div></div>
+        <div class="pick"><span class="pickLab">chi subisce</span><div class="picks" id="pickB"></div></div>
+        <div class="sliders">
+          <label class="sl"><span id="labAB">A &rarr; B</span><input type="range" id="rngAB" min="0" max="100" step="5" value="0"><output id="outAB">0%</output></label>
+          <label class="sl"><span id="labBA">B &rarr; A</span><input type="range" id="rngBA" min="0" max="100" step="5" value="0"><output id="outBA">0%</output></label>
+        </div>
+        <div class="quick">
+          <button data-set="ab">A vince</button>
+          <button data-set="ba">B vince</button>
+          <button data-set="both">reciproco</button>
+          <button data-set="none">indifferenti</button>
+        </div>
+      </div>
+      <div class="row">
+        <label class="fld grow"><span>schema pronto</span>
+          <select id="selPreset">
+            <option value="wheel">Ruota ciclica (originale)</option>
+            <option value="rps">Sasso-Carta-Forbici</option>
+            <option value="rpsls">Sasso-Carta-Forbici-Lucertola-Spock</option>
+            <option value="double">Doppia ruota (batte i due dopo)</option>
+            <option value="hierarchy">Gerarchia (il forte vince sempre)</option>
+            <option value="factions">Due fazioni</option>
+            <option value="mutual">Distruzione reciproca</option>
+            <option value="random">Sorteggio</option>
+            <option value="empty">Pace totale</option>
+          </select>
+        </label>
+        <button id="btnApplyPreset" class="go">applica</button>
+      </div>
+    </div>
+
+    <div class="panel" id="panelDraw" hidden>
+      <p class="hint">Scegli cosa dipingere, poi trascina il dito sul mondo.</p>
+      <div id="brushes"></div>
+      <label class="fld"><span>ampiezza del pennello: <b id="brushSizeVal">3</b></span>
+        <input type="range" id="rngBrush" min="1" max="20" step="1" value="3"></label>
+      <div class="row wrap">
+        <button id="btnFill" class="go alt">riempi tutto</button>
+        <button id="btnBox" class="go alt">cornice di muri</button>
+        <button id="btnBlob" class="go alt">semina a macchie</button>
+      </div>
+    </div>
+
+    <div class="panel" id="panelWorld" hidden>
+      <label class="fld"><span>colori in gioco: <b id="nColorsVal">8</b></span>
+        <input type="range" id="rngN" min="2" max="12" step="1" value="8"></label>
+      <label class="fld"><span>lato del mondo: <b id="sizeVal">80</b> caselle</span>
+        <input type="range" id="rngSize" min="20" max="240" step="10" value="80"></label>
+      <label class="fld"><span>velocit&agrave;: <b id="speedVal">20</b> passi al secondo</span>
+        <input type="range" id="rngSpeed" min="1" max="60" step="1" value="20"></label>
+      <div class="row wrap">
+        <label class="tog"><input type="checkbox" id="chkMoore"><span class="box"></span><span>vicinato a 8 (con le diagonali)</span></label>
+        <label class="tog"><input type="checkbox" id="chkWrap" checked><span class="box"></span><span>bordi che si richiudono</span></label>
+        <label class="tog"><input type="checkbox" id="chkFade" checked><span class="box"></span><span>dissolvenza morbida</span></label>
+        <label class="tog"><input type="checkbox" id="chkStasis" checked><span class="box"></span><span>fermati nella quiete</span></label>
+      </div>
+      <p class="hint">Tavolozza &mdash; tocca per cambiare tinta</p>
+      <div id="palette"></div>
+      <div class="row"><button id="btnReset" class="go alt">ripristina tutto</button></div>
+    </div>
+
+  </div>
+</section>
+
+<script src="faida.js?v=2"></script>
+</body>
+</html>
